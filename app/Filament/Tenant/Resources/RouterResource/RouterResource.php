@@ -173,7 +173,7 @@ class RouterResource extends Resource
                                 '<button type="button" onclick="copyMikroTikScript(this)" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.4); transition: all 0.2s;" onmouseover="this.style.transform=\'translateY(-1px)\';this.style.boxShadow=\'0 6px 8px -1px rgba(59, 130, 246, 0.5)\'" onmouseout="this.style.transform=\'translateY(0)\';this.style.boxShadow=\'0 4px 6px -1px rgba(59, 130, 246, 0.4)\'">Copy Script</button>'.
                                 '</div>'.
                                 '<pre id="mikrotik-script-box" class="font-mono text-xs bg-slate-900 text-green-400 p-4 rounded-lg whitespace-pre overflow-x-auto max-h-96 overflow-y-auto"># Ketik NAS Identifier di atas untuk generate script</pre></div>'.
-                                '<script src="/js/mikrotik-script-generator.js"></script>'.
+                                '<script src="/js/mikrotik-script-generator.js?v=3"></script>'.
                                 '<script>window.configServerIp="'.e($serverIp).'";window.configServerUrl="'.e($serverUrl).'";window.configRadiusSecret="'.e($radiusSecret).'";setTimeout(function(){window.updateMikroTikScript&&window.updateMikroTikScript();},100);</script>'
                             )),
                     ])

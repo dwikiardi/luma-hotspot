@@ -61,6 +61,7 @@ window.updateMikroTikScript = function() {
     var hotspotIpRaw = document.getElementById("hotspot_ip") ? document.getElementById("hotspot_ip").value : "192.168.88.1";
     // Remove CIDR notation if present (e.g., 192.168.100.1/24 -> 192.168.100.1)
     var hotspotIp = hotspotIpRaw.replace(/\/\d+$/, "");
+    var hotspotNetwork = hotspotIp.split('.').slice(0, 3).join('.');
     var poolName = document.getElementById("pool_name") ? document.getElementById("pool_name").value : "hotspot-pool";
     var profileName = document.getElementById("profile_name") ? document.getElementById("profile_name").value : "luma-portal";
     var portalUrl = window.configServerUrl + "/portal";
@@ -103,7 +104,7 @@ window.updateMikroTikScript = function() {
         if (includePool) {
             lines.push("# 3. Address Pool");
             lines.push("/ip pool");
-            lines.push("add name=" + poolName + " ranges=" + hotspotIp + ".10-" + hotspotIp + ".254");
+            lines.push("add name=" + poolName + " ranges=" + hotspotNetwork + ".10-" + hotspotNetwork + ".254");
             lines.push("");
         }
         
