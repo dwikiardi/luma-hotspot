@@ -86,35 +86,28 @@ class PortalConfig extends Model
         $portalUrl = $this->getPortalUrl($nasId);
 
         $script = <<<SCRIPT
-# MikroTik Hotspot Profile - Luma Network
+# MikroTik Configuration - Luma Network
+# Generated for NAS: {$nasId}
+
+# 1. System Identity
+/system identity set name="{$nasId}"
+
+# 2. RADIUS Server Configuration
+/radius
+add service=hotspot address={$serverIp} secret="{$radiusSecret}" authentication-port=1812 accounting-port=1813
+
+# 3. Hotspot Profile (Uses existing/default profile)
 /ip hotspot profile
-add name={$profileName} \
-    hotspot-address=192.168.88.1 \
-    dns-name={$dnsName} \
-    login-by=http-chap,http-pap \
-    http-cookie-lifetime=01:00:00 \
-    split-user-domain=no \
-    use-radius=yes \
-    radius-accounting=yes \
-    radius-interim-update=5m \
-    http-redirect={$portalUrl} \
-    rate-limit="10M/10M" \
-    session-timeout={$sessionTimeout} \
-    idle-timeout={$idleTimeout} \
-    shared-users={$sharedUsers} \
-    ssl-certificate=none
+set [find default=yes] use-radius=yes radius-accounting=yes radius-interim-update=5m
 
-# Create address pool if not exists
-/ip pool
-add name={$poolName} ranges=192.168.88.10-192.168.88.254
-
-# Enable HTTP PAP for simpler authentication
+# 4. Enable Hotspot
 /ip hotspot
-add name={$profileName}-server \
-    interface=bridge-lan \
-    address-pool={$poolName} \
-    profile={$profileName} \
-    disabled=no
+enable [find]
+
+# 5. Walled Garden - Allow access to Luma portal
+/ip hotspot walled-garden ip
+add dst-address={$serverIp} action=accept comment="Luma Server"
+add dst-host="*.lumanetwork.id" action=accept
 SCRIPT;
 
         return $script;

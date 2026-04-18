@@ -61,12 +61,13 @@ class RouterResource extends Resource
         $lines[] = '/radius';
         $lines[] = 'add service=hotspot address='.$serverIp.' secret='.$radiusSecret.' authentication-port=1812 accounting-port=1813';
         $lines[] = '';
-        if ($includeAddressPool) {
-            $lines[] = '# 3. Address Pool';
-            $lines[] = '/ip pool';
-            $lines[] = 'add name='.$poolName.' ranges='.$hotspotAddress.'.10-'.$hotspotAddress.'.254';
-            $lines[] = '';
-        }
+        // IP Pool creation removed - use existing pool or configure manually
+        // if ($includeAddressPool) {
+        //     $lines[] = '# 3. Address Pool';
+        //     $lines[] = '/ip pool';
+        //     $lines[] = 'add name='.$poolName.' ranges='.$hotspotAddress.'.10-'.$hotspotAddress.'.254';
+        //     $lines[] = '';
+        // }
         if ($includeHotspotProfile) {
             if ($version === 'v7') {
                 $lines[] = '# 4. Hotspot Profile (RouterOS v7)';
