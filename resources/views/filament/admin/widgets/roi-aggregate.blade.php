@@ -1,42 +1,41 @@
 <x-filament-widgets::widget>
-    <div class="rounded-xl bg-gradient-to-br from-violet-600 via-indigo-600 to-blue-700 p-6 text-white shadow-lg">
-        <div class="flex items-center justify-between mb-4">
+    <div style="border-radius: 0.75rem; background: linear-gradient(to bottom right, #7c3aed, #4f46e5, #1d4ed8); padding: 1.5rem; color: white; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); overflow: hidden;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
             <div>
-                <p class="text-sm font-medium text-white/80">ROI Platform — 30 Hari</p>
-                <h3 class="text-3xl font-bold tracking-tight mt-1">
+                <p style="font-size: 0.875rem; font-weight: 500; color: #c7d2fe;">ROI Platform — 30 Hari</p>
+                <h3 style="font-size: 1.875rem; font-weight: 700; letter-spacing: -0.025em; margin-top: 0.25rem; color: white;">
                     Rp {{ number_format($totalRoi, 0, ',', '.') }}
                 </h3>
             </div>
-            <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-white/20">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <div style="display: flex; height: 3rem; width: 3rem; align-items: center; justify-content: center; border-radius: 0.75rem; background-color: rgba(255, 255, 255, 0.2); flex-shrink: 0;">
+                <svg xmlns="http://www.w3.org/2000/svg" style="height: 1.5rem; width: 1.5rem; color: white;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.403 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.403-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
             </div>
         </div>
 
-        <div class="mb-4">
-            <div class="flex justify-between text-xs text-white/70 mb-1.5">
+        <div style="margin-bottom: 1.25rem;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: #c7d2fe; margin-bottom: 0.375rem;">
                 <span>Progress vs Target</span>
-                <span class="font-semibold">{{ $progressPercent }}%</span>
+                <span style="font-weight: 600; color: white;">{{ $progressPercent }}%</span>
             </div>
-            <div class="w-full bg-white/20 rounded-full h-2.5 overflow-hidden">
-                <div class="bg-white rounded-full h-2.5 transition-all duration-700 ease-out"
-                     style="width: {{ max($progressPercent, 1) }}%"></div>
+            <div style="width: 100%; background-color: rgba(255, 255, 255, 0.25); border-radius: 9999px; height: 0.625rem; overflow: hidden;">
+                <div style="background-color: white; border-radius: 9999px; height: 0.625rem; transition: all 0.7s ease-out; width: {{ max($progressPercent, 2) }}%;"></div>
             </div>
         </div>
 
-        <div class="grid grid-cols-3 gap-3">
-            <div class="rounded-lg bg-white/10 p-3 text-center">
-                <p class="text-xs text-white/70">Data Tamu</p>
-                <p class="text-sm font-bold mt-0.5">Rp {{ number_format($dataTamu, 0, ',', '.') }}</p>
+        <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem;">
+            <div style="border-radius: 0.5rem; background-color: rgba(255, 255, 255, 0.15); padding: 0.75rem; text-align: center;">
+                <p style="font-size: 0.75rem; color: #c7d2fe;">Data Tamu</p>
+                <p style="font-size: 0.875rem; font-weight: 700; color: white; margin-top: 0.125rem;">Rp {{ number_format($dataTamu, 0, ',', '.') }}</p>
             </div>
-            <div class="rounded-lg bg-white/10 p-3 text-center">
-                <p class="text-xs text-white/70">Komplain</p>
-                <p class="text-sm font-bold mt-0.5">Rp {{ number_format($komplain, 0, ',', '.') }}</p>
+            <div style="border-radius: 0.5rem; background-color: rgba(255, 255, 255, 0.15); padding: 0.75rem; text-align: center;">
+                <p style="font-size: 0.75rem; color: #c7d2fe;">Komplain</p>
+                <p style="font-size: 0.875rem; font-weight: 700; color: white; margin-top: 0.125rem;">Rp {{ number_format($komplain, 0, ',', '.') }}</p>
             </div>
-            <div class="rounded-lg bg-white/10 p-3 text-center">
-                <p class="text-xs text-white/70">Repeat Visit</p>
-                <p class="text-sm font-bold mt-0.5">Rp {{ number_format($repeatVisit, 0, ',', '.') }}</p>
+            <div style="border-radius: 0.5rem; background-color: rgba(255, 255, 255, 0.15); padding: 0.75rem; text-align: center;">
+                <p style="font-size: 0.75rem; color: #c7d2fe;">Repeat Visit</p>
+                <p style="font-size: 0.875rem; font-weight: 700; color: white; margin-top: 0.125rem;">Rp {{ number_format($repeatVisit, 0, ',', '.') }}</p>
             </div>
         </div>
     </div>

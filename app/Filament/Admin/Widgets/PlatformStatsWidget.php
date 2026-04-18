@@ -41,11 +41,6 @@ class PlatformStatsWidget extends StatsOverviewWidget
             ? round(($autoReconnects / $totalAttempts) * 100, 1)
             : 100;
 
-        $monthlyEvents = AnalyticsEvent::where('occurred_at', '>=', now()->subDays(30))
-            ->where('event_type', 'login_success')
-            ->count();
-        $estimatedRoi = $monthlyEvents * 12500;
-
         return [
             Stat::make('Total Tenant Aktif', $activeTenants)
                 ->description("+{$tenantsThisMonth} bulan ini")
@@ -58,11 +53,6 @@ class PlatformStatsWidget extends StatsOverviewWidget
                 ->descriptionIcon($visitorChange >= 0 ? 'heroicon-m-arrow-trending-up' : 'heroicon-m-arrow-trending-down')
                 ->color($visitorChange >= 0 ? 'success' : 'danger')
                 ->chart($this->getVisitorSparkline()),
-
-            Stat::make('ROI Platform (30 hari)', 'Rp '.$this->formatRupiah($estimatedRoi))
-                ->description('nilai bisnis tergenerasi')
-                ->descriptionIcon('heroicon-m-currency-dollar')
-                ->color('warning'),
 
             Stat::make('Seamless Rate', $seamlessRate.'%')
                 ->description('tamu tidak perlu login ulang')
@@ -109,20 +99,5 @@ class PlatformStatsWidget extends StatsOverviewWidget
         }
 
         return $data;
-    }
-
-    private function formatRupiah(int $amount): string
-    {
-        if ($amount >= 1000000000) {
-            return number_format($amount / 1000000000, 1).' M';
-        }
-        if ($amount >= 1000000) {
-            return number_format($amount / 1000000, 1).' Jt';
-        }
-        if ($amount >= 1000) {
-            return number_format($amount / 1000, 0).' Rb';
-        }
-
-        return number_format($amount);
     }
 }
