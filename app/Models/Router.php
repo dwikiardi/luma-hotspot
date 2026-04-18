@@ -16,6 +16,7 @@ class Router extends Model
         'name',
         'location',
         'ip_address',
+        'hotspot_address',
         'model',
         'firmware_version',
         'routeros_version',

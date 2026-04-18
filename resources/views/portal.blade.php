@@ -301,6 +301,8 @@
                 fingerprint: '',
                 trustScore: 50,
                 fingerprintData: {},
+                linkLogin: '{{ $linkLogin ?? "" }}',
+                dstUrl: '{{ $dstUrl ?? "https://www.google.com" }}',
 
                 async init() {
                     await this.collectFingerprint();
@@ -421,7 +423,7 @@
                         const response = await fetch('/auth/wa/request', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json', 'X-Fingerprint': this.fingerprint, 'X-Trust-Score': this.trustScore },
-                            body: JSON.stringify({ phone: this.waPhone, nas_id: '{{ $nasId }}', client_mac: '{{ $mac ?? "" }}' }),
+                            body: JSON.stringify({ phone: this.waPhone, nas_id: '{{ $nasId }}', client_mac: '{{ $mac ?? "" }}', link_login: this.linkLogin, dst: this.dstUrl }),
                         });
                         const data = await response.json();
                         if (data.success) {
@@ -459,7 +461,7 @@
                         const response = await fetch('/auth/wa/verify', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json', 'X-Fingerprint': this.fingerprint, 'X-Trust-Score': this.trustScore },
-                            body: JSON.stringify({ otp: otp, nas_id: '{{ $nasId }}', client_mac: '{{ $mac ?? "" }}' }),
+                            body: JSON.stringify({ otp: otp, nas_id: '{{ $nasId }}', client_mac: '{{ $mac ?? "" }}', link_login: this.linkLogin, dst: this.dstUrl }),
                         });
                         const data = await response.json();
                         if (data.redirect) { window.location.href = data.redirect; }
@@ -477,7 +479,7 @@
                         const response = await fetch('/auth/room', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json', 'X-Fingerprint': this.fingerprint, 'X-Trust-Score': this.trustScore },
-                            body: JSON.stringify({ room_number: this.roomNumber, nas_id: '{{ $nasId }}', client_mac: '{{ $mac ?? "" }}' }),
+                            body: JSON.stringify({ room_number: this.roomNumber, nas_id: '{{ $nasId }}', client_mac: '{{ $mac ?? "" }}', link_login: this.linkLogin, dst: this.dstUrl }),
                         });
                         const data = await response.json();
                         if (data.redirect) { window.location.href = data.redirect; }

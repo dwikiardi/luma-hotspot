@@ -115,8 +115,18 @@ class MikroTikFileController extends Controller
         $(endif)</p>
     </div>
     <script>
+        var baseUrl = "'.$portalUrl.'";
+        var params = "nas_id='.$nasId.'&mac=$(mac)&ip=$(ip)&user=$(username)";
+        var linkLogin = "$(link-login-only)";
+        var linkOrig = "$(link-orig)";
+        if (linkLogin && linkLogin !== "$(link-login-only)" && linkLogin !== "") {
+            params += "&link_login=" + encodeURIComponent(linkLogin);
+        }
+        if (linkOrig && linkOrig !== "$(link-orig)" && linkOrig !== "") {
+            params += "&dst=" + encodeURIComponent(linkOrig);
+        }
         setTimeout(function() {
-            window.location.href = "'.$portalUrl.'?nas_id='.$nasId.'&redirect=$(link-orig)&mac=$(mac)&ip=$(ip)&user=$(username)";
+            window.location.href = baseUrl + "?" + params;
         }, 500);
     </script>
 </body>

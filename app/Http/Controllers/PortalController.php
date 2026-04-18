@@ -113,6 +113,8 @@ class PortalController extends Controller
 
         $relayInfo = $this->parseOption82($request);
         $serverFingerprint = $this->buildServerFingerprint($request, $relayInfo);
+        $linkLogin = $request->query('link_login');
+        $dstUrl = $request->query('dst') ?? $request->query('redirect') ?? 'https://www.google.com';
 
         return view('portal', [
             'methods' => $methods,
@@ -128,6 +130,8 @@ class PortalController extends Controller
             'customLoginEnabled' => $customLoginEnabled,
             'customLoginLabel' => $customLoginLabel,
             'customLoginPlaceholder' => $customLoginPlaceholder,
+            'linkLogin' => $linkLogin,
+            'dstUrl' => $dstUrl,
         ]);
     }
 

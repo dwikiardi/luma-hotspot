@@ -81,11 +81,11 @@ class RouterResource extends Resource
             if ($version === 'v7') {
                 $lines[] = '# 4. Hotspot Profile (RouterOS v7)';
                 $lines[] = '/ip hotspot profile';
-                $lines[] = 'add name='.$profileName.' hotspot-address='.$hotspotAddress.' login-by=http-chap,cookie http-cookie-lifetime=1d use-radius=yes radius-accounting=yes radius-interim-update=5m http-redirect=yes redirect-url='.$portalUrl;
+                $lines[] = 'add name='.$profileName.' hotspot-address='.$hotspotAddress.' login-by=http-pap,http-chap,cookie http-cookie-lifetime=1d use-radius=yes radius-accounting=yes radius-interim-update=5m http-redirect=yes redirect-url='.$portalUrl;
             } else {
                 $lines[] = '# 4. Hotspot Profile (RouterOS v6)';
                 $lines[] = '/ip hotspot profile';
-                $lines[] = 'add name='.$profileName.' hotspot-address='.$hotspotAddress.' login-by=http-chap,cookie http-cookie-lifetime=1d use-radius=yes radius-accounting=yes radius-interim-update=5m';
+                $lines[] = 'add name='.$profileName.' hotspot-address='.$hotspotAddress.' login-by=http-pap,http-chap,cookie http-cookie-lifetime=1d use-radius=yes radius-accounting=yes radius-interim-update=5m';
                 $lines[] = '';
                 $lines[] = '# Note: For v6, upload custom hotspot files (login.html) to redirect to portal';
                 $lines[] = '# Download hotspot files from the button below';

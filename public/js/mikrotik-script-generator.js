@@ -112,11 +112,11 @@ window.updateMikroTikScript = function() {
             if (version === "v7") {
                 lines.push("# 4. Hotspot Profile (RouterOS v7 - with HTTP redirect)");
                 lines.push("/ip hotspot profile");
-                lines.push("add name=" + profileName + " hotspot-address=" + hotspotIp + " login-by=http-chap,cookie http-cookie-lifetime=1d use-radius=yes radius-accounting=yes radius-interim-update=5m http-redirect=yes redirect-url=" + portalUrl);
+                lines.push("add name=" + profileName + " hotspot-address=" + hotspotIp + " login-by=http-pap,http-chap,cookie http-cookie-lifetime=1d use-radius=yes radius-accounting=yes radius-interim-update=5m http-redirect=yes redirect-url=" + portalUrl);
             } else {
                 lines.push("# 4. Hotspot Profile (RouterOS v6 - requires custom hotspot files)");
                 lines.push("/ip hotspot profile");
-                lines.push("add name=" + profileName + " hotspot-address=" + hotspotIp + " login-by=http-chap,cookie http-cookie-lifetime=1d use-radius=yes radius-accounting=yes radius-interim-update=5m");
+                lines.push("add name=" + profileName + " hotspot-address=" + hotspotIp + " login-by=http-pap,http-chap,cookie http-cookie-lifetime=1d use-radius=yes radius-accounting=yes radius-interim-update=5m");
                 lines.push("");
                 lines.push("# Note: For RouterOS v6, upload hotspot files (login.html, redirect.html) to /hotspot folder");
                 lines.push("# These files redirect users to the captive portal");

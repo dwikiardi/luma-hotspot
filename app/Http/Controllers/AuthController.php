@@ -27,6 +27,8 @@ class AuthController extends Controller
         $request->session()->put('nas_id', $request->query('nas_id'));
         $request->session()->put('client_mac', $request->query('client_mac'));
         $request->session()->put('login_method', 'google');
+        $request->session()->put('link_login', $request->query('link_login'));
+        $request->session()->put('dst_url', $request->query('dst') ?? 'https://www.google.com');
 
         return Socialite::driver('google')->redirect();
     }
@@ -64,7 +66,7 @@ class AuthController extends Controller
         $request->validate([
             'phone' => 'required|digits_between:10,15',
             'nas_id' => 'required',
-            'client_mac' => 'required',
+            'client_mac' => 'nullable',
         ]);
 
         $phone = $request->input('phone');
@@ -74,7 +76,9 @@ class AuthController extends Controller
         $request->session()->put('wa_otp', $otp);
         $request->session()->put('wa_otp_expires', now()->addMinutes(5)->timestamp);
         $request->session()->put('nas_id', $request->input('nas_id'));
-        $request->session()->put('client_mac', $request->input('client_mac'));
+        $request->session()->put('client_mac', $request->input('client_mac') ?? 'unknown');
+        $request->session()->put('link_login', $request->input('link_login'));
+        $request->session()->put('dst_url', $request->input('dst') ?? 'https://www.google.com');
 
         Log::info('WA OTP for development', ['phone' => $phone, 'otp' => $otp]);
 
@@ -91,7 +95,7 @@ class AuthController extends Controller
         $request->validate([
             'otp' => 'required|digits:6',
             'nas_id' => 'required',
-            'client_mac' => 'required',
+            'client_mac' => 'nullable',
         ]);
 
         $storedOtp = $request->session()->get('wa_otp');
@@ -123,6 +127,8 @@ class AuthController extends Controller
         );
 
         $request->session()->forget(['wa_phone', 'wa_otp', 'wa_otp_expires']);
+        $request->session()->put('link_login', $request->input('link_login') ?? $request->session()->get('link_login'));
+        $request->session()->put('dst_url', $request->input('dst') ?? $request->session()->get('dst_url') ?? 'https://www.google.com');
 
         return $this->processLoginJson($request, $user, 'wa');
     }
@@ -132,7 +138,7 @@ class AuthController extends Controller
         $request->validate([
             'room_number' => 'required',
             'nas_id' => 'required',
-            'client_mac' => 'required',
+            'client_mac' => 'nullable',
         ]);
 
         $roomNumber = $request->input('room_number');
@@ -150,7 +156,9 @@ class AuthController extends Controller
         }
 
         $request->session()->put('nas_id', $request->input('nas_id'));
-        $request->session()->put('client_mac', $request->input('client_mac'));
+        $request->session()->put('client_mac', $request->input('client_mac') ?? 'unknown');
+        $request->session()->put('link_login', $request->input('link_login'));
+        $request->session()->put('dst_url', $request->input('dst') ?? 'https://www.google.com');
 
         $user = User::updateOrCreate(
             [
@@ -177,8 +185,10 @@ class AuthController extends Controller
 
     private function processLogin(Request $request, User $user, string $method): array
     {
-        $nasId = $request->session()->get('nas_id') ?? $request->query('nas_id');
-        $mac = $request->session()->get('client_mac') ?? $request->query('client_mac');
+        $nasId = $request->session()->get('nas_id') ?? $request->input('nas_id') ?? $request->query('nas_id');
+        $mac = $request->session()->get('client_mac') ?? $request->input('client_mac') ?? $request->query('client_mac') ?? 'unknown';
+        $linkLogin = $request->input('link_login') ?? $request->session()->get('link_login') ?? $request->query('link_login');
+        $dstUrl = $request->input('dst') ?? $request->session()->get('dst_url') ?? $request->query('dst') ?? 'https://www.google.com';
 
         $router = Router::where('nas_identifier', $nasId)->firstOrFail();
         $config = $router->tenant->portalConfig;
@@ -186,7 +196,7 @@ class AuthController extends Controller
         $fingerprintHash = $request->header('X-Fingerprint');
 
         $device = Device::firstOrCreate(
-            ['fingerprint_hash' => $fingerprintHash],
+            ['fingerprint_hash' => $fingerprintHash ?: 'fp-'.md5($mac)],
             ['user_id' => $user->id]
         );
 
@@ -208,63 +218,57 @@ class AuthController extends Controller
 
         $this->analytics->upsertVisitorProfile($router->tenant_id, $user->id, $method);
 
-        $coaHost = $router->ip_address;
-        if ($coaHost) {
-            $this->radius->setCoaHost($coaHost);
-            $coaResult = $this->radius->acceptUser(
-                mac: $mac,
-                nasId: $router->nas_identifier,
-                sessionTimeout: $config->grace_period_seconds
-            );
-            Log::info('CoA sent', [
-                'host' => $coaHost,
-                'mac' => $mac,
-                'nasId' => $router->nas_identifier,
-                'result' => $coaResult,
-            ]);
-        } else {
-            Log::warning('Router has no IP address, skipping CoA', [
-                'router_id' => $router->id,
-                'nas_identifier' => $router->nas_identifier,
-            ]);
-        }
+        // Determine redirect URL: MikroTik hotspot login or fallback
+        $redirectUrl = $this->buildMikroTikLoginUrl($router, $user, $linkLogin, $dstUrl);
 
-        // #region agent log H4/H2: login success redirect + cookie attributes
-        $debugLogPath = base_path('.cursor/debug-4dc385.log');
-        $debugPayload = [
-            'sessionId' => '4dc385',
-            'runId' => 'debug_initial',
-            'hypothesisId' => 'H4',
-            'location' => 'AuthController.php:processLogin',
-            'message' => 'processLogin redirecting to fixed external URL',
-            'data' => [
-                'target_url' => 'https://www.google.com',
-                'login_method' => $method,
-                'nas_id' => $nasId,
-                'client_mac' => $mac,
-                'luma_session_cookie_minutes' => (int) ($config->grace_period_seconds / 60),
-                'request_secure' => $request->secure(),
-                'has_X-Fingerprint' => $request->header('X-Fingerprint') !== null,
-            ],
-            'timestamp' => (int) round(microtime(true) * 1000),
-        ];
-        file_put_contents($debugLogPath, json_encode($debugPayload)."\n", FILE_APPEND);
-        // #endregion
+        Log::info('Login redirect', [
+            'method' => $method,
+            'nas_id' => $nasId,
+            'client_mac' => $mac,
+            'link_login' => $linkLogin,
+            'hotspot_address' => $router->hotspot_address,
+            'redirect_url' => $redirectUrl,
+            'username' => $user->identity_value,
+        ]);
 
         return [
-            'redirect' => 'https://www.google.com',
+            'redirect' => $redirectUrl,
             'cookie' => cookie(
                 'luma_session',
                 $session->cookie_token,
                 (int) ($config->grace_period_seconds / 60),
                 '/',
                 null,
-                true,
-                true,
+                false,
+                false,
                 false,
                 'Lax'
             ),
         ];
+    }
+
+    private function buildMikroTikLoginUrl(Router $router, User $user, ?string $linkLogin, string $dstUrl): string
+    {
+        $username = $user->identity_value;
+        $password = $user->identity_value;
+
+        // Priority 1: link_login URL from MikroTik v6 hotspot (passed via login.html redirect)
+        if ($linkLogin) {
+            $separator = str_contains($linkLogin, '?') ? '&' : '?';
+            return $linkLogin . $separator . 'username=' . urlencode($username) . '&password=' . urlencode($password) . '&dst=' . urlencode($dstUrl);
+        }
+
+        // Priority 2: hotspot_address from router config (for MikroTik v7 HTTP redirect)
+        if ($router->hotspot_address) {
+            $hotspotAddr = $router->hotspot_address;
+            if (!str_starts_with($hotspotAddr, 'http')) {
+                $hotspotAddr = 'http://' . $hotspotAddr;
+            }
+            return $hotspotAddr . '/login?username=' . urlencode($username) . '&password=' . urlencode($password) . '&dst=' . urlencode($dstUrl);
+        }
+
+        // Fallback: just redirect to destination (no MikroTik auth - for testing)
+        return $dstUrl;
     }
 
     private function processLoginRedirect(Request $request, User $user, string $method): RedirectResponse
