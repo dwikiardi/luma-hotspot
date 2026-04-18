@@ -1,0 +1,28 @@
+sql {
+    driver = "rlm_sql_postgresql"
+    dialect = "postgresql"
+
+    server = "db"
+    port = 5432
+    login = "postgres"
+    password = ""
+    radius_db = "luma_hotspot"
+
+    acct_table1 = "radacct"
+    acct_table2 = "radacct"
+
+    read_clients = yes
+    client_table = "nas"
+
+    pool {
+        start = 1
+        min = 0
+        max = 5
+        spare = 1
+        uses = 0
+        lifetime = 0
+        idle_timeout = 60
+    }
+
+    $INCLUDE ${modconfdir}/${.:name}/main/${dialect}/queries.conf
+}

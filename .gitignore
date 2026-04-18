@@ -1,0 +1,41 @@
+*.log
+.DS_Store
+.env
+.env.backup
+.env.production
+.phpactor.json
+.phpunit.result.cache
+/.fleet
+/.idea
+/.nova
+/.phpunit.cache
+/.vscode
+/.zed
+/auth.json
+/node_modules
+/public/build
+/public/hot
+/public/storage
+/storage/*.key
+/storage/pail
+/vendor
+Homestead.json
+Homestead.yaml
+Thumbs.db
+
+# Debug/cursor files
+.cursor/
+debug-4dc385.log
+
+# Docker data
+docker/radius/raddb/certs/
+
+# Node modules (local)
+node_modules/
+.opencode/
+.playwright-mcp/
+
+# Local Node.js
+.local/
+.env.bak
+HandleImpersonation.php
