@@ -27,6 +27,7 @@ class AdminPanelProvider extends PanelProvider
             ->login()
             ->colors(['primary' => Color::Indigo])
             ->brandName('Luma Network')
+            ->brandLogo(fn () => view('filament.admin.brand-logo'))
             ->darkMode(true)
             ->sidebarCollapsibleOnDesktop()
             ->globalSearch()

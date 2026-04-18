@@ -30,7 +30,7 @@ class PlatformStatsWidget extends StatsOverviewWidget
 
         $visitorChange = $yesterdayVisitors > 0
             ? round((($todayVisitors - $yesterdayVisitors) / $yesterdayVisitors) * 100)
-            : 0;
+            : ($todayVisitors > 0 ? 100 : 0);
 
         $autoReconnects = AnalyticsEvent::whereDate('occurred_at', today())
             ->where('event_type', 'auto_reconnect')->count();
@@ -48,14 +48,14 @@ class PlatformStatsWidget extends StatsOverviewWidget
 
         return [
             Stat::make('Total Tenant Aktif', $activeTenants)
-                ->description("{$tenantsThisMonth} tenant baru bulan ini")
+                ->description("+{$tenantsThisMonth} bulan ini")
                 ->descriptionIcon('heroicon-m-building-storefront')
                 ->color('primary')
                 ->chart($this->getTenantSparkline()),
 
             Stat::make('Visitor Hari Ini', number_format($todayVisitors))
                 ->description(($visitorChange >= 0 ? '+' : '')."{$visitorChange}% vs kemarin")
-                ->descriptionIcon('heroicon-m-users')
+                ->descriptionIcon($visitorChange >= 0 ? 'heroicon-m-arrow-trending-up' : 'heroicon-m-arrow-trending-down')
                 ->color($visitorChange >= 0 ? 'success' : 'danger')
                 ->chart($this->getVisitorSparkline()),
 

@@ -12,7 +12,7 @@ use Filament\Pages\Dashboard as BaseDashboard;
 
 class Dashboard extends BaseDashboard
 {
-    protected static ?string $title = 'Luma Network — Overview';
+    protected static ?string $title = 'Dashboard';
 
     protected static ?string $navigationGroup = 'Dashboard';
 
@@ -20,21 +20,27 @@ class Dashboard extends BaseDashboard
 
     protected static string $routePath = '/';
 
-    protected function getHeaderWidgets(): array
+    protected static ?string $navigationIcon = 'heroicon-o-home';
+
+    public function getWidgets(): array
     {
         return [
             PlatformStatsWidget::class,
+            AlertsWidget::class,
+            ROIAggregateWidget::class,
+            RealtimeVisitorWidget::class,
+            TenantGrowthChartWidget::class,
+            TopVenuesWidget::class,
         ];
     }
 
-    protected function getFooterWidgets(): array
+    public function getColumns(): int|string|array
     {
         return [
-            TenantGrowthChartWidget::class,
-            RealtimeVisitorWidget::class,
-            ROIAggregateWidget::class,
-            AlertsWidget::class,
-            TopVenuesWidget::class,
+            'sm' => 1,
+            'md' => 2,
+            'lg' => 3,
+            'xl' => 4,
         ];
     }
 }
