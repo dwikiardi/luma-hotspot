@@ -144,9 +144,9 @@ class RouterResource extends Resource
                     ])->columns(2),
                 Forms\Components\Section::make('Konfigurasi Jaringan')
                     ->schema([
-                        Forms\Components\TextInput::make('ip_address')->label('IP Address Router')->required()->ipv4()->placeholder('192.168.1.1'),
+                        Forms\Components\TextInput::make('ip_address')->label('IP Address Router (Publik)')->placeholder('192.168.1.1')->helperText('IP publik router, biarkan kosong jika router di belakang NAT.'),
+                        Forms\Components\TextInput::make('hotspot_address')->label('Hotspot IP Address')->placeholder('192.168.88.1')->helperText('IP address MikroTik yang diakses client (utk redirect setelah login).')->reactive()->extraAttributes(['oninput' => 'window.updateMikroTikScript&&window.updateMikroTikScript()']),
                         Forms\Components\TextInput::make('model')->label('Model Router')->maxLength(255)->placeholder('Contoh: MikroTik RB951Ui-2HnD'),
-                        Forms\Components\TextInput::make('firmware_version')->label('Versi Firmware')->maxLength(255)->placeholder('Contoh: v7.12'),
                         Forms\Components\Select::make('routeros_version')->label('RouterOS Version')->options(['v6' => 'RouterOS v6 (requires hotspot files)', 'v7' => 'RouterOS v7 (built-in HTTP redirect)'])->default('v7')->required()->helperText('Pilih versi MikroTik RouterOS.')->reactive(),
                     ])->columns(2),
                 Forms\Components\Section::make('Status & Catatan')
