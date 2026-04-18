@@ -58,7 +58,9 @@ window.updateMikroTikScript = function() {
     var includeProfile = document.getElementById("opt_profile") ? document.getElementById("opt_profile").checked : false;
     var includeServer = document.getElementById("opt_server") ? document.getElementById("opt_server").checked : false;
     var includeWalled = document.getElementById("opt_walled") ? document.getElementById("opt_walled").checked : true;
-    var hotspotIp = document.getElementById("hotspot_ip") ? document.getElementById("hotspot_ip").value : "192.168.88.1";
+    var hotspotIpRaw = document.getElementById("hotspot_ip") ? document.getElementById("hotspot_ip").value : "192.168.88.1";
+    // Remove CIDR notation if present (e.g., 192.168.100.1/24 -> 192.168.100.1)
+    var hotspotIp = hotspotIpRaw.replace(/\/\d+$/, "");
     var poolName = document.getElementById("pool_name") ? document.getElementById("pool_name").value : "hotspot-pool";
     var profileName = document.getElementById("profile_name") ? document.getElementById("profile_name").value : "luma-portal";
     var portalUrl = window.configServerUrl + "/portal";
