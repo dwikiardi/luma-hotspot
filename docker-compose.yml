@@ -73,14 +73,14 @@ services:
       - luma_net
 
   radius:
-    image: freeradius/freeradius-server:latest
+    build:
+      context: ./docker/radius
+      dockerfile: Dockerfile
     container_name: luma_radius
     restart: unless-stopped
     ports:
       - "1812:1812/udp"
       - "1813:1813/udp"
-    volumes:
-      - ./docker/radius/raddb:/etc/freeradius
     networks:
       - luma_net
     depends_on:
