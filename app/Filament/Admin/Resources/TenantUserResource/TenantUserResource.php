@@ -155,7 +155,8 @@ class TenantUserResource extends Resource
                     ->visible(fn () => auth('admin')->user()?->isSuperAdmin() ?? false)
                     ->url(function (TenantUser $record): string {
                         return '/impersonate/'.$record->id;
-                    }),
+                    })
+                    ->openUrlInNewTab(),
                 Tables\Actions\Action::make('resetPassword')
                     ->label('Reset Password')
                     ->icon('heroicon-o-key')

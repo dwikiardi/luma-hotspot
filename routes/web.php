@@ -108,12 +108,19 @@ Route::get('/test-login-tenant', function () {
 
 Route::get('/impersonate/{userId}', function (int $userId) {
     $user = TenantUser::with('tenant')->findOrFail($userId);
+    
+    // Clear any existing tenant user auth
     Auth::guard('tenant_users')->logout();
+    
+    // Login as the tenant user
     Auth::guard('tenant_users')->login($user);
     session()->regenerate();
+    
+    // Get tenant slug for redirect
     $slug = $user->tenant?->slug ?? 'unknown';
-
-    return redirect("/dashboard/venue/{$slug}");
+    
+    // Redirect to tenant dashboard
+    return redirect()->to("/dashboard/venue/{$slug}");
 })->name('impersonate');
 
 // DEBUG ROUTE - Remove after fixing
