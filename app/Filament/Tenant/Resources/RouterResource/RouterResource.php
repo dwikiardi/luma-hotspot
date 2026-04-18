@@ -50,6 +50,10 @@ class RouterResource extends Resource
         $radiusSecret = Config::get('services.radius.secret', 'luma_radius_secret');
         $portalUrl = $serverUrl.'/portal';
         $lines = [];
+        
+        // Remove CIDR notation if present (e.g., 192.168.100.1/24 -> 192.168.100.1)
+        $hotspotAddress = preg_replace('/\/\d+$/', '', $hotspotAddress);
+        
         // Extract network base for pool example (e.g., 192.168.100.1 -> 192.168.100)
         $networkBase = substr($hotspotAddress, 0, strrpos($hotspotAddress, '.'));
         

@@ -85,6 +85,9 @@ class PortalConfig extends Model
 
         $portalUrl = $this->getPortalUrl($nasId);
         
+        // Remove CIDR notation if present (e.g., 192.168.100.1/24 -> 192.168.100.1)
+        $hotspotAddress = preg_replace('/\/\d+$/', '', $hotspotAddress);
+        
         // Extract base network from hotspot address (e.g., 192.168.100.1 -> 192.168.100)
         $networkBase = substr($hotspotAddress, 0, strrpos($hotspotAddress, '.'));
 
