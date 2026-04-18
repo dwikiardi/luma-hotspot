@@ -115,20 +115,69 @@ title: MikroTik Setup - Luma Network
             const nasId = document.getElementById('nasId').value || 'YOUR_NAS_ID';
             const serverIp = document.getElementById('serverIp').value || '103.137.140.6';
             const radiusSecret = document.getElementById('radiusSecret').value || 'luma_radius_secret';
+            
+            // Detect RouterOS version from user agent or default to v7
+            const isROSv6 = navigator.userAgent.includes('RouterOS v6') || false;
 
-            return `# MikroTik Configuration - Luma Network
-/system identity
-set name="${nasId}"
+            if (isROSv6) {
+                return `# MikroTik Configuration - Luma Network (RouterOS v6)
+# Generated for: ${nasId}
+
+# 1. System Identity
+/system identity set name="${nasId}"
+
+# 2. RADIUS Server
 /radius
-add service=hotspot address=${serverIp} secret=${radiusSecret} authentication-port=1812 accounting-port=1813
+add service=hotspot address=${serverIp} secret="${radiusSecret}" authentication-port=1812 accounting-port=1813
+
+# 3. Hotspot Profile
 /ip hotspot profile
-set [find default=yes] use-radius=yes radius-accounting=yes nas-port-type=wireless-802.11 radius-interim-update=5m
+set [find default=yes] name=hsprof1 use-radius=yes radius-accounting=yes radius-interim-update=5m
+
+# 4. Enable Hotspot on Interface
+/ip hotspot
+enable [find]
+
+# 5. Walled Garden (Allow Captive Portal Access)
 /ip hotspot walled-garden ip
-add dst-address=${serverIp} action=accept
-add dst-host=*.lumanetwork.id action=accept
-add dst-host=*.google.com action=accept
-add dst-host=*.facebook.com action=accept
-add dst-host=*.apple.com action=accept`;
+add dst-address=${serverIp} action=accept comment="Luma Server"
+add dst-host="*.lumanetwork.id" action=accept
+add dst-host="*.google.com" action=accept
+add dst-host="*.facebook.com" action=accept
+add dst-host="*.apple.com" action=accept
+
+# NOTE: For RouterOS v6, download hotspot files from:
+# http://${serverIp}:8081/mikrotik/hotspot-files?nas_id=${nasId}
+# Then upload login.html to Files > hotspot folder`;
+            } else {
+                return `# MikroTik Configuration - Luma Network (RouterOS v7)
+# Generated for: ${nasId}
+
+# 1. System Identity
+/system identity set name="${nasId}"
+
+# 2. RADIUS Server
+/radius
+add service=hotspot address=${serverIp} secret="${radiusSecret}" authentication-port=1812 accounting-port=1813
+
+# 3. Hotspot Profile (RouterOS v7 with http-redirect)
+/ip hotspot profile
+set [find default=yes] name=hsprof1 use-radius=yes radius-accounting=yes radius-interim-update=5m
+
+# 4. Enable Hotspot on Interface
+/ip hotspot
+enable [find]
+
+# 5. Walled Garden (Allow Captive Portal Access)
+/ip hotspot walled-garden ip
+add dst-address=${serverIp} action=accept comment="Luma Server"
+add dst-host="*.lumanetwork.id" action=accept
+add dst-host="*.google.com" action=accept
+add dst-host="*.facebook.com" action=accept
+add dst-host="*.apple.com" action=accept
+
+# RouterOS v7: Portal redirect configured automatically`;
+            }
         }
 
         function updateDisplay() {
