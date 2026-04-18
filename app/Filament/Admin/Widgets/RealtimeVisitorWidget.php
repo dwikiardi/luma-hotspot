@@ -9,13 +9,13 @@ class RealtimeVisitorWidget extends ChartWidget
 {
     protected static ?string $heading = 'Visitor Realtime (24 jam terakhir)';
 
-    protected int|string|array $columnSpan = 6;
+    protected int|string|array $columnSpan = 4;
 
     protected static ?string $pollingInterval = '60';
 
     protected function getHeight(): string
     {
-        return '300px';
+        return '320px';
     }
 
     protected function getData(): array

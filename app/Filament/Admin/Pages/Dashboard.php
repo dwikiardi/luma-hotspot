@@ -25,12 +25,17 @@ class Dashboard extends BaseDashboard
     public function getWidgets(): array
     {
         return [
+            // Row 1: Stats overview (full width)
             PlatformStatsWidget::class,
+            
+            // Row 2: Alerts and ROI (equal width)
             AlertsWidget::class,
             ROIAggregateWidget::class,
+            TopVenuesWidget::class,
+            
+            // Row 3-4: Charts (equal width, side by side)
             RealtimeVisitorWidget::class,
             TenantGrowthChartWidget::class,
-            TopVenuesWidget::class,
         ];
     }
 
@@ -40,7 +45,7 @@ class Dashboard extends BaseDashboard
             'sm' => 1,
             'md' => 2,
             'lg' => 3,
-            'xl' => 4,
+            'xl' => 3, // 3 columns for better equal sizing
         ];
     }
 }

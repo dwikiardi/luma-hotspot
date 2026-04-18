@@ -9,11 +9,13 @@ class TenantGrowthChartWidget extends ChartWidget
 {
     protected static ?string $heading = 'Pertumbuhan Tenant';
 
-    protected int|string|array $columnSpan = 6;
+    protected int|string|array $columnSpan = 4;
+
+    protected static ?string $pollingInterval = '300';
 
     protected function getHeight(): string
     {
-        return '300px';
+        return '320px';
     }
 
     protected function getData(): array
@@ -75,6 +77,7 @@ class TenantGrowthChartWidget extends ChartWidget
             'plugins' => [
                 'legend' => [
                     'display' => true,
+                    'position' => 'bottom',
                 ],
             ],
             'interaction' => [

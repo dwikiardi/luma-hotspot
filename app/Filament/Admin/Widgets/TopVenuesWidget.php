@@ -16,6 +16,8 @@ class TopVenuesWidget extends BaseWidget
 
     protected static ?int $sort = 5;
 
+    protected static ?string $pollingInterval = '300';
+
     public function table(Table $table): Table
     {
         return $table
@@ -97,6 +99,8 @@ class TopVenuesWidget extends BaseWidget
                         return 'Rp '.number_format($roi / 1000, 0).' Rb';
                     }),
             ])
-            ->paginated(false);
+            ->paginated(false)
+            ->emptyStateHeading('Belum ada data')
+            ->emptyStateDescription('Data tenant akan muncul di sini.');
     }
 }
