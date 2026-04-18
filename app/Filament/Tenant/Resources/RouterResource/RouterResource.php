@@ -50,8 +50,20 @@ class RouterResource extends Resource
         $radiusSecret = Config::get('services.radius.secret', 'luma_radius_secret');
         $portalUrl = $serverUrl.'/portal';
         $lines = [];
+        // Extract network base for pool example (e.g., 192.168.100.1 -> 192.168.100)
+        $networkBase = substr($hotspotAddress, 0, strrpos($hotspotAddress, '.'));
+        
         $lines[] = '# MikroTik Configuration - Luma Network';
         $lines[] = '# RouterOS Version: '.$version;
+        $lines[] = '';
+        $lines[] = '# ============================================================';
+        $lines[] = '# MANUAL STEP: Configure IP Pool (Do this first!)';
+        $lines[] = '# ============================================================';
+        $lines[] = '# For network '.$hotspotAddress.'/24, create pool:';
+        $lines[] = '# /ip pool add name='.$poolName.' ranges='.$networkBase.'.10-'.$networkBase.'.254';
+        $lines[] = '#';
+        $lines[] = '# Or use existing pool already configured on your router';
+        $lines[] = '# ============================================================';
         $lines[] = '';
         $lines[] = '# 1. System Identity';
         $lines[] = '/system identity';
@@ -59,15 +71,8 @@ class RouterResource extends Resource
         $lines[] = '';
         $lines[] = '# 2. RADIUS Server';
         $lines[] = '/radius';
-        $lines[] = 'add service=hotspot address='.$serverIp.' secret='.$radiusSecret.' authentication-port=1812 accounting-port=1813';
+        $lines[] = 'add service=hotspot address='.$serverIp.' secret="'.$radiusSecret.'" authentication-port=1812 accounting-port=1813';
         $lines[] = '';
-        // IP Pool creation removed - use existing pool or configure manually
-        // if ($includeAddressPool) {
-        //     $lines[] = '# 3. Address Pool';
-        //     $lines[] = '/ip pool';
-        //     $lines[] = 'add name='.$poolName.' ranges='.$hotspotAddress.'.10-'.$hotspotAddress.'.254';
-        //     $lines[] = '';
-        // }
         if ($includeHotspotProfile) {
             if ($version === 'v7') {
                 $lines[] = '# 4. Hotspot Profile (RouterOS v7)';

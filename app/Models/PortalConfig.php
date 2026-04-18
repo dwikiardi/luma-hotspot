@@ -84,10 +84,25 @@ class PortalConfig extends Model
         $sharedUsers = $this->shared_users ?? 3;
 
         $portalUrl = $this->getPortalUrl($nasId);
+        
+        // Extract base network from hotspot address (e.g., 192.168.100.1 -> 192.168.100)
+        $networkBase = substr($hotspotAddress, 0, strrpos($hotspotAddress, '.'));
 
         $script = <<<SCRIPT
 # MikroTik Configuration - Luma Network
 # Generated for NAS: {$nasId}
+
+# ============================================================
+# MANUAL STEP 1: Configure IP Pool (Do this first!)
+# ============================================================
+# Example for network {$hotspotAddress}/24:
+# /ip pool add name=hotspot-pool ranges={$networkBase}.10-{$networkBase}.254
+#
+# Or use your existing pool (default: 'hsprof1')
+
+# ============================================================
+# STEP 2: Run these commands
+# ============================================================
 
 # 1. System Identity
 /system identity set name="{$nasId}"
