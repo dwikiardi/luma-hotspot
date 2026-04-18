@@ -36,6 +36,8 @@ class PortalController extends Controller
                 'customLoginEnabled' => false,
                 'customLoginLabel' => 'Nomor Kamar',
                 'customLoginPlaceholder' => 'Contoh: 101',
+                'linkLogin' => null,
+                'dstUrl' => 'https://www.google.com',
             ]);
         }
 
@@ -58,6 +60,8 @@ class PortalController extends Controller
                 'customLoginEnabled' => false,
                 'customLoginLabel' => 'Nomor Kamar',
                 'customLoginPlaceholder' => 'Contoh: 101',
+                'linkLogin' => $request->query('link_login'),
+                'dstUrl' => $request->query('dst') ?? $request->query('redirect') ?? 'https://www.google.com',
             ]);
         }
 

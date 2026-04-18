@@ -81,7 +81,16 @@ class RouterResource extends Resource
             if ($version === 'v7') {
                 $lines[] = '# 4. Hotspot Profile (RouterOS v7)';
                 $lines[] = '/ip hotspot profile';
-                $lines[] = 'add name='.$profileName.' hotspot-address='.$hotspotAddress.' login-by=http-pap,http-chap,cookie http-cookie-lifetime=1d use-radius=yes radius-accounting=yes radius-interim-update=5m http-redirect=yes redirect-url='.$portalUrl;
+                $lines[] = 'add name='.$profileName.' hotspot-address='.$hotspotAddress.' login-by=http-pap,http-chap,cookie http-cookie-lifetime=1d use-radius=yes radius-accounting=yes radius-interim-update=5m http-redirect=yes redirect-url='.$portalUrl.'?nas_id='.$nasId;
+                $lines[] = '';
+                $lines[] = '# 4b. DNS - Redirect queries to MikroTik (required for captive portal)';
+                $lines[] = '/ip dns';
+                $lines[] = 'set allow-remote-requests=yes cache-size=4096';
+                $lines[] = '';
+                $lines[] = '# 4c. NAT - Redirect DNS to MikroTik';
+                $lines[] = '/ip firewall nat';
+                $lines[] = 'add chain=dstnat protocol=udp dst-port=53 action=redirect to-ports=53 comment="DNS Redirect"';
+                $lines[] = 'add chain=dstnat protocol=tcp dst-port=53 action=redirect to-ports=53 comment="DNS Redirect TCP"';
             } else {
                 $lines[] = '# 4. Hotspot Profile (RouterOS v6)';
                 $lines[] = '/ip hotspot profile';
@@ -99,13 +108,20 @@ class RouterResource extends Resource
             $lines[] = '';
         }
         if ($includeWalledGarden) {
-            $lines[] = '# 6. Walled Garden (Captive Portal Access)';
+            $lines[] = '# Walled Garden (Allow access to portal and CNA detection)';
             $lines[] = '/ip hotspot walled-garden ip';
-            $lines[] = 'add dst-address='.$serverIp.' action=accept';
-            $lines[] = 'add dst-host=*.lumanetwork.id action=accept';
-            $lines[] = 'add dst-host=*.google.com action=accept';
-            $lines[] = 'add dst-host=*.facebook.com action=accept';
-            $lines[] = 'add dst-host=*.apple.com action=accept';
+            $lines[] = 'add dst-address='.$serverIp.' action=accept comment="Luma Portal Server"';
+            $lines[] = 'add dst-port=53 protocol=udp action=accept comment="DNS"';
+            $lines[] = 'add dst-port=53 protocol=tcp action=accept comment="DNS TCP"';
+            $lines[] = 'add dst-host=*.lumanetwork.id action=accept comment="Luma Domain"';
+            $lines[] = 'add dst-host=captive.apple.com action=accept comment="iOS CNA"';
+            $lines[] = 'add dst-host=*.apple.com action=accept comment="Apple Services"';
+            $lines[] = 'add dst-host=connectivitycheck.gstatic.com action=accept comment="Android CNA"';
+            $lines[] = 'add dst-host=*.google.com action=accept comment="Google"';
+            $lines[] = 'add dst-host=*.googleapis.com action=accept comment="Google APIs"';
+            $lines[] = 'add dst-host=*.facebook.com action=accept comment="Facebook"';
+            $lines[] = 'add dst-host=*.whatsapp.com action=accept comment="WhatsApp"';
+            $lines[] = 'add dst-host=*.whatsapp.net action=accept comment="WhatsApp CDN"';
             $lines[] = '';
         }
 

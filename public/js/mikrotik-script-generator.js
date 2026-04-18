@@ -65,6 +65,7 @@ window.updateMikroTikScript = function() {
     var poolName = document.getElementById("pool_name") ? document.getElementById("pool_name").value : "hotspot-pool";
     var profileName = document.getElementById("profile_name") ? document.getElementById("profile_name").value : "luma-portal";
     var portalUrl = window.configServerUrl + "/portal";
+    var portalUrlWithNasId = portalUrl + "?nas_id=" + encodeURIComponent(nasId);
     
     var hotspotCfg = document.getElementById("hotspot_config");
     if (hotspotCfg) hotspotCfg.classList.toggle("hidden", !includeProfile);
@@ -110,16 +111,40 @@ window.updateMikroTikScript = function() {
         
         if (includeProfile) {
             if (version === "v7") {
-                lines.push("# 4. Hotspot Profile (RouterOS v7 - with HTTP redirect)");
+                lines.push("# 4. Hotspot Setup (RouterOS v7)");
+                lines.push("");
+                lines.push("# 4a. Hotspot Profile");
                 lines.push("/ip hotspot profile");
-                lines.push("add name=" + profileName + " hotspot-address=" + hotspotIp + " login-by=http-pap,http-chap,cookie http-cookie-lifetime=1d use-radius=yes radius-accounting=yes radius-interim-update=5m http-redirect=yes redirect-url=" + portalUrl);
+                lines.push("add name=" + profileName + " hotspot-address=" + hotspotIp + " login-by=http-pap,http-chap,cookie http-cookie-lifetime=1d use-radius=yes radius-accounting=yes radius-interim-update=5m http-redirect=yes redirect-url=" + portalUrlWithNasId);
+                lines.push("");
+                lines.push("# 4b. DNS - Redirect all DNS queries to MikroTik (required for captive portal detection)");
+                lines.push("/ip dns");
+                lines.push("set allow-remote-requests=yes cache-size=4096");
+                lines.push("");
+                lines.push("# 4c. NAT - Redirect DNS to MikroTik");
+                lines.push("/ip firewall nat");
+                lines.push("add chain=dstnat protocol=udp dst-port=53 action=redirect to-ports=53 comment=\"DNS Redirect\"");
+                lines.push("add chain=dstnat protocol=tcp dst-port=53 action=redirect to-ports=53 comment=\"DNS Redirect TCP\"");
+                lines.push("");
+                lines.push("# 4d. NAT - Redirect HTTP to hotspot for captive portal (unauthenticated users)");
+                lines.push("add chain=pre-hotspot protocol=tcp dst-port=80 hotspot=auth action=return comment=\"Skip auth users\"");
+                lines.push("add chain=dstnat protocol=tcp dst-port=80 src-address-list=!hotspot-auth action=dst-nat to-addresses=" + hotspotIp + " to-ports=80 comment=\"HTTP to hotspot\"");
             } else {
-                lines.push("# 4. Hotspot Profile (RouterOS v6 - requires custom hotspot files)");
+                lines.push("# 4. Hotspot Setup (RouterOS v6 - requires custom hotspot files)");
                 lines.push("/ip hotspot profile");
                 lines.push("add name=" + profileName + " hotspot-address=" + hotspotIp + " login-by=http-pap,http-chap,cookie http-cookie-lifetime=1d use-radius=yes radius-accounting=yes radius-interim-update=5m");
                 lines.push("");
                 lines.push("# Note: For RouterOS v6, upload hotspot files (login.html, redirect.html) to /hotspot folder");
-                lines.push("# These files redirect users to the captive portal");
+                lines.push("# These files redirect users to the captive portal with nas_id parameter");
+                lines.push("");
+                lines.push("# DNS - Redirect all DNS queries to MikroTik (required for captive portal detection)");
+                lines.push("/ip dns");
+                lines.push("set allow-remote-requests=yes cache-size=4096");
+                lines.push("");
+                lines.push("# NAT - Redirect DNS to MikroTik");
+                lines.push("/ip firewall nat");
+                lines.push("add chain=dstnat protocol=udp dst-port=53 action=redirect to-ports=53 comment=\"DNS Redirect\"");
+                lines.push("add chain=dstnat protocol=tcp dst-port=53 action=redirect to-ports=53 comment=\"DNS Redirect TCP\"");
             }
             lines.push("");
         }
@@ -132,13 +157,20 @@ window.updateMikroTikScript = function() {
         }
         
         if (includeWalled) {
-            lines.push("# 6. Walled Garden (Captive Portal Access)");
+            lines.push("# " + (version === "v7" ? "5" : "5") + ". Walled Garden (Allow access to portal and CNA detection servers)");
             lines.push("/ip hotspot walled-garden ip");
-            lines.push("add dst-address=" + window.configServerIp + " action=accept");
-            lines.push("add dst-host=*.lumanetwork.id action=accept");
-            lines.push("add dst-host=*.google.com action=accept");
-            lines.push("add dst-host=*.facebook.com action=accept");
-            lines.push("add dst-host=*.apple.com action=accept");
+            lines.push("add dst-address=" + window.configServerIp + " action=accept comment=\"Luma Portal Server\"");
+            lines.push("add dst-port=53 protocol=udp action=accept comment=\"DNS\"");
+            lines.push("add dst-port=53 protocol=tcp action=accept comment=\"DNS TCP\"");
+            lines.push("add dst-host=*.lumanetwork.id action=accept comment=\"Luma Domain\"");
+            lines.push("add dst-host=captive.apple.com action=accept comment=\"iOS CNA Detection\"");
+            lines.push("add dst-host=*.apple.com action=accept comment=\"Apple Services\"");
+            lines.push("add dst-host=connectivitycheck.gstatic.com action=accept comment=\"Android CNA Detection\"");
+            lines.push("add dst-host=*.google.com action=accept comment=\"Google Services\"");
+            lines.push("add dst-host=*.googleapis.com action=accept comment=\"Google APIs\"");
+            lines.push("add dst-host=*.facebook.com action=accept comment=\"Facebook\"");
+            lines.push("add dst-host=*.whatsapp.com action=accept comment=\"WhatsApp\"");
+            lines.push("add dst-host=*.whatsapp.net action=accept comment=\"WhatsApp CDN\"");
             lines.push("");
         }
     }
