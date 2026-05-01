@@ -7,6 +7,7 @@ use App\Models\UserSession;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Support\Facades\DB;
 
 class VisitorSessionResource extends Resource
 {
@@ -16,7 +17,6 @@ class VisitorSessionResource extends Resource
     protected static ?string $navigationLabel = "Pengunjung Aktif";
     protected static ?string $navigationGroup = "Pengunjung";
     protected static ?int $navigationSort = 1;
-    protected static ?string $tenantOwnershipRelationshipName = "router";
 
     public static function canCreate(): bool
     {
@@ -25,22 +25,29 @@ class VisitorSessionResource extends Resource
 
     public static function table(Table $table): Table
     {
-        $tenantId = filament()->getTenant()?->id;
-
         return $table
-            ->modifyQueryUsing(function ($query) use ($tenantId) {
-                $routerIds = Router::where("tenant_id", $tenantId)->pluck("id");
-                return $query->whereIn("router_id", $routerIds)->with(["user", "router"]);
+            ->query(function () {
+                $tenantId = filament()->getTenant()?->id;
+                $routerIds = Router::where('tenant_id', $tenantId)->pluck('id')->toArray();
+
+                if (empty($routerIds)) {
+                    return UserSession::where('id', 0);
+                }
+
+                return UserSession::whereIn('router_id', $routerIds)
+                    ->with(['user', 'router'])
+                    ->orderBy('login_at', 'desc');
             })
             ->columns([
                 Tables\Columns\TextColumn::make("user.name")
                     ->label("Nama")
+                    ->default(fn ($record) => $record->user?->name ?? $record->user?->identity_value ?? '-')
                     ->searchable(),
                 Tables\Columns\TextColumn::make("user.identity_value")
-                    ->label("Email / HP")
+                    ->label("User")
                     ->formatStateUsing(function ($state, UserSession $record): string {
                         if ($record->user) {
-                            $type = $record->user->identity_type ?? "email";
+                            $type = $record->user->identity_type ?? "room";
                             $val = $record->user->identity_value ?? "-";
                             return $type === "phone" ? "+" . $val : $val;
                         }
@@ -78,6 +85,7 @@ class VisitorSessionResource extends Resource
                     ->size("text-sm"),
                 Tables\Columns\TextColumn::make("router.name")
                     ->label("Router")
+                    ->default(fn ($record) => $record->router?->name ?? '-')
                     ->size("text-sm"),
                 Tables\Columns\TextColumn::make("status")
                     ->badge()
@@ -96,6 +104,23 @@ class VisitorSessionResource extends Resource
                 Tables\Columns\TextColumn::make("login_at")
                     ->label("Login")
                     ->dateTime("d M H:i"),
+                Tables\Columns\TextColumn::make("duration")
+                    ->label("Durasi")
+                    ->state(fn (UserSession $record): string => $record->login_at
+                        ? $record->login_at->diffForHumans(now(), true)
+                        : '-'
+                    ),
+                Tables\Columns\TextColumn::make("expires_at")
+                    ->label("Sisa Waktu")
+                    ->state(fn (UserSession $record): string => match ($record->status) {
+                        'active' => $record->expires_at
+                            ? $record->expires_at->diffForHumans(now(), true)
+                            : '-',
+                        'disconnected' => $record->seconds_remaining > 0
+                            ? $record->seconds_remaining . 's grace'
+                            : 'expired',
+                        default => '-',
+                    }),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make("status")

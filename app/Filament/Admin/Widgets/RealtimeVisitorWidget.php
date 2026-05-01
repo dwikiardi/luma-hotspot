@@ -2,12 +2,12 @@
 
 namespace App\Filament\Admin\Widgets;
 
-use App\Models\AnalyticsEvent;
 use Filament\Widgets\ChartWidget;
+use Illuminate\Support\Facades\DB;
 
 class RealtimeVisitorWidget extends ChartWidget
 {
-    protected static ?string $heading = 'Visitor Realtime (24 jam terakhir)';
+    protected static ?string $heading = 'Login Realtime (24 jam terakhir)';
 
     protected int|string|array $columnSpan = 4;
 
@@ -28,10 +28,15 @@ class RealtimeVisitorWidget extends ChartWidget
         for ($h = 0; $h < 24; $h++) {
             $labels[] = str_pad($h, 2, '0', STR_PAD_LEFT).':00';
 
-            $count = AnalyticsEvent::whereDate('occurred_at', today())
-                ->whereRaw('EXTRACT(HOUR FROM occurred_at) = ?', [$h])
-                ->where('event_type', 'login_success')
-                ->count();
+            try {
+                $count = DB::table('radpostauth')
+                    ->whereRaw("authdate::timestamp >= now() - interval '24 hours'")
+                    ->whereRaw("EXTRACT(HOUR FROM authdate::timestamp) = ?", [$h])
+                    ->where('reply', 'Access-Accept')
+                    ->count();
+            } catch (\Exception $e) {
+                $count = 0;
+            }
             $data[] = $count;
 
             $colors[] = $h === $currentHour ? '#f59e0b' : 'rgba(99, 102, 241, 0.7)';
@@ -40,7 +45,7 @@ class RealtimeVisitorWidget extends ChartWidget
         return [
             'datasets' => [
                 [
-                    'label' => 'Visitor',
+                    'label' => 'Login',
                     'data' => $data,
                     'backgroundColor' => $colors,
                 ],

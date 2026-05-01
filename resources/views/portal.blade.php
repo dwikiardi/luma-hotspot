@@ -118,8 +118,13 @@
         .back-btn { display: inline-flex; align-items: center; gap: 6px; color: #6b7280; font-size: 14px; cursor: pointer; margin-bottom: 16px; }
         .error-msg { background: #fef2f2; color: #dc2626; padding: 12px 16px; border-radius: 8px; font-size: 14px; margin-bottom: 16px; display: none; }
         .error-msg.show { display: block; }
-        .success-msg { background: #f0fdf4; color: #16a34a; padding: 12px 16px; border-radius: 8px; font-size: 14px; margin-bottom: 16px; display: none; }
-        .success-msg.show { display: block; }
+        .success-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 100; }
+        .success-card { background: white; border-radius: 20px; padding: 40px 32px; text-align: center; max-width: 360px; width: 90%; box-shadow: 0 25px 50px rgba(0,0,0,0.25); }
+        .success-icon { width: 64px; height: 64px; background: #22c55e; border-radius: 50%; margin: 0 auto 20px; display: flex; align-items: center; justify-content: center; }
+        .success-icon svg { width: 36px; height: 36px; fill: white; }
+        .success-title { font-size: 24px; font-weight: 700; color: #1f2937; margin-bottom: 8px; }
+        .success-subtitle { font-size: 15px; color: #6b7280; margin-bottom: 24px; }
+        .success-countdown { font-size: 13px; color: #9ca3af; }
         .footer { text-align: center; padding: 24px; color: #9ca3af; font-size: 12px; }
         .footer a { color: {{ $branding['color'] ?? '#6366f1' }}; text-decoration: none; }
         .spinner { width: 20px; height: 20px; border: 2px solid white; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; }
@@ -207,6 +212,19 @@
                 @else
                     <div id="errorMsg" class="error-msg" x-show="error" x-text="error"></div>
                     <div id="successMsg" class="success-msg" x-show="success" x-text="success"></div>
+
+                    <template x-if="showSuccess">
+                        <div class="success-overlay">
+                            <div class="success-card">
+                                <div class="success-icon">
+                                    <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                                </div>
+                                <div class="success-title">Login Berhasil!</div>
+                                <div class="success-subtitle" x-text="successMessage"></div>
+                                <div class="success-countdown">Mengalihkan dalam <span x-text="countdown"></span> detik...</div>
+                            </div>
+                        </div>
+                    </template>
 
                     @if(($methods['google'] ?? false))
                         <a href="{{ route('login.google', ['nas_id' => $nasId, 'client_mac' => $mac ?? '']) }}" class="btn btn-google">
@@ -298,6 +316,9 @@
                 loading: false,
                 error: '',
                 success: '',
+                showSuccess: false,
+                successMessage: '',
+                countdown: 3,
                 fingerprint: '',
                 trustScore: 50,
                 fingerprintData: {},
@@ -464,11 +485,28 @@
                             body: JSON.stringify({ otp: otp, nas_id: '{{ $nasId }}', client_mac: '{{ $mac ?? "" }}', link_login: this.linkLogin, dst: this.dstUrl }),
                         });
                         const data = await response.json();
-                        if (data.redirect) { window.location.href = data.redirect; }
-                        else if (data.success) { window.location.href = 'https://www.google.com'; }
-                        else { this.error = data.message || 'OTP tidak valid'; }
+                        if (data.redirect) {
+                            this.showSuccess = true;
+                            this.successMessage = 'Selamat datang! Anda akan terhubung ke internet.';
+                            this.startRedirect(data.redirect);
+                        } else if (data.success) {
+                            this.showSuccess = true;
+                            this.successMessage = 'Login berhasil!';
+                            this.startRedirect('https://www.google.com');
+                        } else { this.error = data.message || 'OTP tidak valid'; }
                     } catch (e) { this.error = 'Terjadi kesalahan. Coba lagi.'; }
                     finally { this.loading = false; }
+                },
+
+                startRedirect(url) {
+                    this.countdown = 3;
+                    const interval = setInterval(() => {
+                        this.countdown--;
+                        if (this.countdown <= 0) {
+                            clearInterval(interval);
+                            window.location.href = url;
+                        }
+                    }, 1000);
                 },
 
                 async loginRoom() {
@@ -482,9 +520,15 @@
                             body: JSON.stringify({ room_number: this.roomNumber, nas_id: '{{ $nasId }}', client_mac: '{{ $mac ?? "" }}', link_login: this.linkLogin, dst: this.dstUrl }),
                         });
                         const data = await response.json();
-                        if (data.redirect) { window.location.href = data.redirect; }
-                        else if (data.success) { window.location.href = 'https://www.google.com'; }
-                        else { this.error = data.message || 'Login gagal'; }
+                        if (data.redirect) {
+                            this.showSuccess = true;
+                            this.successMessage = 'Selamat datang! Anda akan terhubung ke internet.';
+                            this.startRedirect(data.redirect);
+                        } else if (data.success) {
+                            this.showSuccess = true;
+                            this.successMessage = 'Login berhasil!';
+                            this.startRedirect('https://www.google.com');
+                        } else { this.error = data.message || 'Login gagal'; }
                     } catch (e) { this.error = 'Terjadi kesalahan. Coba lagi.'; }
                     finally { this.loading = false; }
                 },

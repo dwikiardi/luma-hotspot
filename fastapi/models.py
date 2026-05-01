@@ -11,13 +11,13 @@ class FingerprintPayload(BaseModel):
     webgl_hash: Optional[str] = None
     fonts_hash: Optional[str] = None
     mac: Optional[str] = None
-    ip: str
+    ip: Optional[str] = "0.0.0.0"
     user_agent: str
     nas_id: str
     accept_lang: Optional[str] = None
     circuit_id: Optional[str] = None
     room_number: Optional[str] = None
-    
+
     platform: Optional[str] = None
     os_name: Optional[str] = None
     os_version: Optional[str] = None

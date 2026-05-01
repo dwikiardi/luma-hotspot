@@ -2,7 +2,13 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\Admin\Resources\ActivityLogResource\ActivityLogResource;
+use App\Filament\Admin\Resources\AdminUserResource\AdminUserResource;
+use App\Filament\Admin\Resources\NasResource\NasResource;
+use App\Filament\Admin\Resources\RadAcctResource\RadAcctResource;
+use App\Filament\Admin\Resources\RadUserResource\RadUserResource;
 use App\Filament\Admin\Resources\TenantResource\TenantResource;
+use App\Filament\Admin\Resources\TenantUserResource\TenantUserResource;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -41,17 +47,20 @@ class AdminPanelProvider extends PanelProvider
             )
             ->resources([
                 TenantResource::class,
+                TenantUserResource::class,
+                AdminUserResource::class,
+                ActivityLogResource::class,
+                RadUserResource::class,
+                NasResource::class,
+                RadAcctResource::class,
             ])
-            ->discoverResources(
-                in: app_path('Filament/Admin/Resources'),
-                for: 'App\\Filament\\Admin\\Resources'
-            )
             ->discoverWidgets(
                 in: app_path('Filament/Admin/Widgets'),
                 for: 'App\\Filament\\Admin\\Widgets'
             )
             ->navigationGroups([
                 'Dashboard',
+                'RADIUS',
                 'Manajemen Tenant',
                 'User Management',
                 'Sistem',

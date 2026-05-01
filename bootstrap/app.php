@@ -1,6 +1,5 @@
 <?php
 
-use App\Http\Middleware\DebugRequestLogger;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -13,15 +12,15 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->append(DebugRequestLogger::class);
+        $middleware->trustProxies(at: '*');
 
-        // Exclude auth routes from CSRF for captive portal compatibility
         $middleware->validateCsrfTokens(except: [
             '/auth/wa/request',
             '/auth/wa/verify',
             '/auth/room',
             '/api/fingerprint',
             '/api/fingerprint/*',
+            '/radius/accounting',
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

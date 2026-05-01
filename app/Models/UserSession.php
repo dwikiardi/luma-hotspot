@@ -64,11 +64,12 @@ class UserSession extends Model
 
     public function getSecondsRemainingAttribute(): int
     {
-        if (! $this->isInGracePeriod()) {
+        if ($this->expires_at === null) {
             return 0;
         }
 
-        return (int) now()->diffInSeconds($this->expires_at);
+        $remaining = (int) now()->diffInSeconds($this->expires_at, false);
+        return max(0, $remaining);
     }
 
     public function refreshExpiry(int $gracePeriodSeconds): void

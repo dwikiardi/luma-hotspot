@@ -72,6 +72,36 @@ services:
     networks:
       - luma_net
 
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile.laravel
+    container_name: luma_scheduler
+    restart: unless-stopped
+    command: php artisan schedule:work
+    environment:
+      - APP_ENV=production
+      - APP_DEBUG=false
+      - APP_URL=http://103.137.140.6:8081
+      - APP_BASE_PATH=/var/www/html
+      - DB_CONNECTION=pgsql
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_DATABASE=luma_hotspot
+      - DB_USERNAME=postgres
+      - DB_PASSWORD=secretpassword_staging
+      - FASTAPI_URL=http://fastapi:8001
+      - RADIUS_SECRET=luma_radius_secret
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI}
+    volumes:
+      - ./storage:/var/www/html/storage
+    networks:
+      - luma_net
+    depends_on:
+      - db
+
   radius:
     build:
       context: ./docker/radius

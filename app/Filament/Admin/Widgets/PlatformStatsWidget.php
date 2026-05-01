@@ -2,10 +2,10 @@
 
 namespace App\Filament\Admin\Widgets;
 
-use App\Models\AnalyticsEvent;
 use App\Models\Tenant;
 use Filament\Widgets\StatsOverviewWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
+use Illuminate\Support\Facades\DB;
 
 class PlatformStatsWidget extends StatsOverviewWidget
 {
@@ -18,86 +18,80 @@ class PlatformStatsWidget extends StatsOverviewWidget
         $activeTenants = Tenant::where('is_active', true)->count();
         $tenantsThisMonth = Tenant::where('created_at', '>=', now()->startOfMonth())->count();
 
-        $todayVisitors = AnalyticsEvent::whereDate('occurred_at', today())
-            ->where('event_type', 'login_success')
-            ->distinct('user_id')
-            ->count('user_id');
+        try {
+            $todayLogins = DB::table('radpostauth')
+                ->whereRaw("authdate::timestamp::date = now()::date")
+                ->where('reply', 'Access-Accept')
+                ->distinct('username')
+                ->count('username');
+        } catch (\Exception $e) {
+            $todayLogins = 0;
+        }
 
-        $yesterdayVisitors = AnalyticsEvent::whereDate('occurred_at', today()->subDay())
-            ->where('event_type', 'login_success')
-            ->distinct('user_id')
-            ->count('user_id');
+        try {
+            $yesterdayLogins = DB::table('radpostauth')
+                ->whereRaw("authdate::timestamp::date = (now() - interval '1 day')::date")
+                ->where('reply', 'Access-Accept')
+                ->distinct('username')
+                ->count('username');
+        } catch (\Exception $e) {
+            $yesterdayLogins = 0;
+        }
 
-        $visitorChange = $yesterdayVisitors > 0
-            ? round((($todayVisitors - $yesterdayVisitors) / $yesterdayVisitors) * 100)
-            : ($todayVisitors > 0 ? 100 : 0);
+        $loginChange = $yesterdayLogins > 0
+            ? round((($todayLogins - $yesterdayLogins) / $yesterdayLogins) * 100)
+            : ($todayLogins > 0 ? 100 : 0);
 
-        $autoReconnects = AnalyticsEvent::whereDate('occurred_at', today())
-            ->where('event_type', 'auto_reconnect')->count();
-        $forcedRelogins = AnalyticsEvent::whereDate('occurred_at', today())
-            ->where('event_type', 'forced_relogin')->count();
-        $totalAttempts = $autoReconnects + $forcedRelogins;
-        $seamlessRate = $totalAttempts > 0
-            ? round(($autoReconnects / $totalAttempts) * 100, 1)
+        try {
+            $activeSessions = DB::table('radacct')
+                ->whereNull('acctstoptime')
+                ->count();
+        } catch (\Exception $e) {
+            $activeSessions = 0;
+        }
+
+        try {
+            $todayRejects = DB::table('radpostauth')
+                ->whereRaw("authdate::timestamp::date = now()::date")
+                ->where('reply', 'Access-Reject')
+                ->count();
+        } catch (\Exception $e) {
+            $todayRejects = 0;
+        }
+
+        try {
+            $todayAccepts = DB::table('radpostauth')
+                ->whereRaw("authdate::timestamp::date = now()::date")
+                ->where('reply', 'Access-Accept')
+                ->count();
+        } catch (\Exception $e) {
+            $todayAccepts = 0;
+        }
+
+        $authRate = ($todayAccepts + $todayRejects) > 0
+            ? round(($todayAccepts / ($todayAccepts + $todayRejects)) * 100)
             : 100;
 
         return [
             Stat::make('Total Tenant Aktif', $activeTenants)
                 ->description("+{$tenantsThisMonth} bulan ini")
                 ->descriptionIcon('heroicon-m-building-storefront')
-                ->color('primary')
-                ->chart($this->getTenantSparkline()),
+                ->color('primary'),
 
-            Stat::make('Visitor Hari Ini', number_format($todayVisitors))
-                ->description(($visitorChange >= 0 ? '+' : '')."{$visitorChange}% vs kemarin")
-                ->descriptionIcon($visitorChange >= 0 ? 'heroicon-m-arrow-trending-up' : 'heroicon-m-arrow-trending-down')
-                ->color($visitorChange >= 0 ? 'success' : 'danger')
-                ->chart($this->getVisitorSparkline()),
+            Stat::make('Login Hari Ini', number_format($todayLogins))
+                ->description(($loginChange >= 0 ? '+' : '').$loginChange.'% vs kemarin')
+                ->descriptionIcon($loginChange >= 0 ? 'heroicon-m-arrow-trending-up' : 'heroicon-m-arrow-trending-down')
+                ->color($loginChange >= 0 ? 'success' : 'danger'),
 
-            Stat::make('Seamless Rate', $seamlessRate.'%')
-                ->description('tamu tidak perlu login ulang')
+            Stat::make('Sesi Aktif', $activeSessions)
+                ->description('pengguna online')
+                ->descriptionIcon('heroicon-m-wifi')
+                ->color($activeSessions > 0 ? 'success' : 'gray'),
+
+            Stat::make('Auth Rate', $authRate.'%')
+                ->description($todayRejects.' reject')
                 ->descriptionIcon('heroicon-m-shield-check')
-                ->color($seamlessRate >= 90 ? 'success' : ($seamlessRate >= 70 ? 'warning' : 'danger'))
-                ->chart($this->getSeamlessSparkline()),
+                ->color($authRate >= 90 ? 'success' : ($authRate >= 70 ? 'warning' : 'danger')),
         ];
-    }
-
-    private function getTenantSparkline(): array
-    {
-        $data = [];
-        for ($i = 6; $i >= 0; $i--) {
-            $data[] = Tenant::whereDate('created_at', today()->subDays($i))->count();
-        }
-
-        return $data;
-    }
-
-    private function getVisitorSparkline(): array
-    {
-        $data = [];
-        for ($h = 0; $h < 24; $h++) {
-            $data[] = AnalyticsEvent::whereDate('occurred_at', today())
-                ->whereRaw('EXTRACT(HOUR FROM occurred_at) = ?', [$h])
-                ->where('event_type', 'login_success')
-                ->count();
-        }
-
-        return $data;
-    }
-
-    private function getSeamlessSparkline(): array
-    {
-        $data = [];
-        for ($i = 6; $i >= 0; $i--) {
-            $date = today()->subDays($i);
-            $auto = AnalyticsEvent::whereDate('occurred_at', $date)
-                ->where('event_type', 'auto_reconnect')->count();
-            $forced = AnalyticsEvent::whereDate('occurred_at', $date)
-                ->where('event_type', 'forced_relogin')->count();
-            $total = $auto + $forced;
-            $data[] = $total > 0 ? round(($auto / $total) * 100) : 100;
-        }
-
-        return $data;
     }
 }

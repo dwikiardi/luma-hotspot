@@ -34,3 +34,9 @@ Schedule::call(function () {
         ->where('last_seen_at', '<', now()->subHours(24))
         ->update(['status' => 'expired']);
 })->hourly();
+
+Schedule::call(function () {
+    UserSession::where('status', 'active')
+        ->where('expires_at', '<', now())
+        ->update(['status' => 'disconnected', 'disconnected_at' => now()]);
+})->everyMinute();

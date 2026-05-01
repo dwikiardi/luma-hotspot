@@ -3,23 +3,25 @@
 namespace App\Http\Controllers;
 
 use App\Models\Router;
+use App\Models\User;
+use App\Models\UserSession;
 use App\Services\AnalyticsEngine;
 use App\Services\GracePeriodEngine;
-use App\Services\MikroTikRadiusService;
 use Illuminate\Http\Request;
 
 class PortalController extends Controller
 {
     public function __construct(
         private GracePeriodEngine $graceEngine,
-        private AnalyticsEngine $analytics,
-        private MikroTikRadiusService $radius
+        private AnalyticsEngine $analytics
     ) {}
 
     public function show(Request $request)
     {
         $nasId = $request->query('nas_id');
         $mac = $request->query('client_mac');
+        $linkLogin = $request->query('link_login');
+        $dstUrl = $request->query('dst') ?? $request->query('redirect') ?? 'https://www.google.com';
 
         if (! $nasId) {
             return response()->view('portal', [
@@ -60,8 +62,8 @@ class PortalController extends Controller
                 'customLoginEnabled' => false,
                 'customLoginLabel' => 'Nomor Kamar',
                 'customLoginPlaceholder' => 'Contoh: 101',
-                'linkLogin' => $request->query('link_login'),
-                'dstUrl' => $request->query('dst') ?? $request->query('redirect') ?? 'https://www.google.com',
+                'linkLogin' => $linkLogin,
+                'dstUrl' => $dstUrl,
             ]);
         }
 
@@ -74,31 +76,67 @@ class PortalController extends Controller
 
         $graceResult = $this->graceEngine->check($request, $router);
 
-        if ($graceResult->shouldAutoLogin) {
-            // #region agent log H1: portal triggers silent auto-login
-            $debugLogPath = base_path('.cursor/debug-4dc385.log');
-            $debugPayload = [
-                'sessionId' => '4dc385',
-                'runId' => 'debug_initial',
-                'hypothesisId' => 'H1',
-                'location' => 'PortalController.php:show',
-                'message' => 'Portal show triggering silentAutoLogin',
-                'data' => [
-                    'request_host' => $request->getHost(),
-                    'request_scheme' => $request->getScheme(),
-                    'request_path' => $request->path(),
-                    'nas_id' => $nasId,
-                    'client_mac' => $mac,
-                    'has_luma_session_cookie' => $request->cookies->has('luma_session'),
-                    'matched_user_session_id' => $graceResult->session?->id,
-                    'matched_seconds_remaining' => $graceResult->session?->seconds_remaining,
-                ],
-                'timestamp' => (int) round(microtime(true) * 1000),
-            ];
-            file_put_contents($debugLogPath, json_encode($debugPayload)."\n", FILE_APPEND);
-            // #endregion
+        $cookie = $request->cookie('luma_session');
+        $activeSession = $cookie
+            ? UserSession::where('cookie_token', $cookie)
+                ->where('router_id', $router->id)
+                ->where('status', 'active')
+                ->where('expires_at', '>', now())
+                ->first()
+            : null;
 
-            return $this->silentAutoLogin($request, $graceResult->session, $router);
+        if ($activeSession) {
+            $user = User::find($activeSession->user_id);
+            $loginUrl = $this->buildMikroTikLoginUrl(
+                $router,
+                $user?->identity_value ?? '',
+                $user?->identity_value ?? '',
+                $linkLogin,
+                $dstUrl
+            );
+
+            return redirect($loginUrl)
+                ->withCookie(cookie(
+                    'luma_session',
+                    $activeSession->cookie_token,
+                    (int) ($activeSession->seconds_remaining / 60),
+                    '/',
+                    null,
+                    false,
+                    false,
+                    false,
+                    'Lax'
+                ));
+        }
+
+        if ($graceResult->shouldAutoLogin) {
+            $session = $graceResult->session;
+
+            if ($session->status === 'active') {
+                $user = User::find($session->user_id);
+                $loginUrl = $this->buildMikroTikLoginUrl(
+                    $router,
+                    $user?->identity_value ?? '',
+                    $user?->identity_value ?? '',
+                    $linkLogin,
+                    $dstUrl
+                );
+
+                return redirect($loginUrl)
+                    ->withCookie(cookie(
+                        'luma_session',
+                        $session->cookie_token,
+                        (int) ($session->seconds_remaining / 60),
+                        '/',
+                        null,
+                        false,
+                        false,
+                        false,
+                        'Lax'
+                    ));
+            }
+
+            return $this->silentAutoLogin($request, $session, $router, $linkLogin, $dstUrl);
         }
 
         $config = $router->tenant->portalConfig;
@@ -117,8 +155,6 @@ class PortalController extends Controller
 
         $relayInfo = $this->parseOption82($request);
         $serverFingerprint = $this->buildServerFingerprint($request, $relayInfo);
-        $linkLogin = $request->query('link_login');
-        $dstUrl = $request->query('dst') ?? $request->query('redirect') ?? 'https://www.google.com';
 
         return view('portal', [
             'methods' => $methods,
@@ -139,13 +175,23 @@ class PortalController extends Controller
         ]);
     }
 
-    private function silentAutoLogin(Request $request, $session, Router $router)
+    private function silentAutoLogin(Request $request, $session, Router $router, ?string $linkLogin, string $dstUrl)
     {
-        $this->radius->acceptUser(
-            mac: $session->mac_address,
-            nasId: $router->nas_identifier,
-            sessionTimeout: $session->seconds_remaining
-        );
+        $user = User::find($session->user_id);
+
+        if (! $user) {
+            return redirect($dstUrl);
+        }
+
+        $session->update([
+            'status' => 'active',
+            'last_seen_at' => now(),
+        ]);
+
+        $username = $user->identity_value;
+        $password = $user->identity_value;
+
+        $redirectUrl = $this->buildMikroTikLoginUrl($router, $username, $password, $linkLogin, $dstUrl);
 
         $this->analytics->track('auto_reconnect', [
             'tenant_id' => $router->tenant_id,
@@ -154,38 +200,44 @@ class PortalController extends Controller
             'device_id' => $session->device_id,
             'mac' => $session->mac_address,
             'ip' => $request->ip(),
+            'redirect_url' => $redirectUrl,
         ]);
 
-        // #region agent log H4: redirect target from silent auto-login
-        $debugLogPath = base_path('.cursor/debug-4dc385.log');
-        $debugPayload = [
-            'sessionId' => '4dc385',
-            'runId' => 'debug_initial',
-            'hypothesisId' => 'H4',
-            'location' => 'PortalController.php:silentAutoLogin',
-            'message' => 'Silent auto-login redirecting to fixed external URL',
-            'data' => [
-                'target_url' => 'https://www.google.com',
-                'matched_user_session_id' => $session->id,
-                'cookie_minutes' => (int) ($session->seconds_remaining / 60),
-            ],
-            'timestamp' => (int) round(microtime(true) * 1000),
-        ];
-        file_put_contents($debugLogPath, json_encode($debugPayload)."\n", FILE_APPEND);
-        // #endregion
-
-        return redirect('https://www.google.com')
+        return redirect($redirectUrl)
             ->withCookie(cookie(
                 'luma_session',
                 $session->cookie_token,
                 (int) ($session->seconds_remaining / 60),
                 '/',
                 null,
-                true,
-                true,
+                false,
+                false,
                 false,
                 'Lax'
             ));
+    }
+
+    private function buildMikroTikLoginUrl(Router $router, string $username, string $password, ?string $linkLogin, string $dstUrl): string
+    {
+        if ($linkLogin) {
+            $separator = str_contains($linkLogin, '?') ? '&' : '?';
+            return $linkLogin . $separator . 'username=' . urlencode($username) . '&password=' . urlencode($password) . '&dst=' . urlencode($dstUrl);
+        }
+
+        if ($router->hotspot_address) {
+            $hotspotAddr = $router->hotspot_address;
+            if (!str_starts_with($hotspotAddr, 'http')) {
+                $hotspotAddr = 'http://' . $hotspotAddr;
+            }
+            return $hotspotAddr . '/login?username=' . urlencode($username) . '&password=' . urlencode($password) . '&dst=' . urlencode($dstUrl);
+        }
+
+        return $dstUrl;
+    }
+
+    private function buildAlreadyOnlineUrl(string $dstUrl): string
+    {
+        return url('/portal/online?dst=' . urlencode($dstUrl));
     }
 
     private function detectCNA(string $ua): bool

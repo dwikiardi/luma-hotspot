@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\DeviceFingerprint;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -44,7 +45,13 @@ class FingerprintController extends Controller
             
             if ($response->successful()) {
                 $data = $response->json();
-                
+
+                try {
+                    DeviceFingerprint::findOrCreateFromAnalysis($validated, $data);
+                } catch (\Throwable $e) {
+                    Log::warning('Failed to store fingerprint', ['error' => $e->getMessage()]);
+                }
+
                 return response()->json([
                     'success' => true,
                     'fingerprint_hash' => $data['fingerprint_hash'],
@@ -74,7 +81,19 @@ class FingerprintController extends Controller
             
             $fallbackScore = $this->calculateFallbackScore($validated);
             $fingerprintHash = $this->calculateFallbackHash($validated);
-            
+
+            try {
+                DeviceFingerprint::findOrCreateFromAnalysis($validated, [
+                    'fingerprint_hash' => $fingerprintHash,
+                    'trust_score' => $fallbackScore,
+                    'confidence' => 'medium',
+                    'is_known_device' => false,
+                    'risk_factors' => [],
+                ]);
+            } catch (\Throwable $e) {
+                Log::warning('Failed to store fingerprint', ['error' => $e->getMessage()]);
+            }
+
             return response()->json([
                 'success' => true,
                 'fingerprint_hash' => $fingerprintHash,

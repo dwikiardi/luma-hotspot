@@ -26,6 +26,14 @@ Thumbs.db
 # Debug/cursor files
 .cursor/
 debug-4dc385.log
+admin-check
+admin-dashboard
+console-admin
+portal-eden
+portal-room
+tenant-dashboard
+tenant-fixed
+Hotspot-Server.ovpn
 
 # Docker data
 docker/radius/raddb/certs/
@@ -39,3 +47,6 @@ node_modules/
 .local/
 .env.bak
 HandleImpersonation.php
+dashboard-full.png
+app/Filament/Filament/
+dashboard-full.png

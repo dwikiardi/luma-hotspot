@@ -2,40 +2,57 @@
 
 namespace App\Filament\Tenant\Widgets;
 
-use App\Services\AnalyticsEngine;
+use App\Models\Router;
+use App\Models\UserSession;
 use Filament\Widgets\ChartWidget;
+use Illuminate\Support\Facades\DB;
 
 class GracePeriodStatsWidget extends ChartWidget
 {
+    protected static ?string $heading = 'Login per Hari (7 hari)';
+
     protected function getData(): array
     {
         $tenant = filament()->getTenant();
-        $analytics = app(AnalyticsEngine::class);
-        $data = $analytics->getDashboardSummary($tenant->id, '7days');
+        $tenantId = $tenant?->id;
+
+        if (! $tenantId) {
+            return ['datasets' => [], 'labels' => []];
+        }
+
+        $routerIds = Router::where('tenant_id', $tenantId)->pluck('id')->toArray();
 
         $labels = [];
-        $autoReconnects = [];
-        $forcedRelogins = [];
+        $successData = [];
+        $graceData = [];
 
         for ($i = 6; $i >= 0; $i--) {
-            $date = now()->subDays($i)->format('d/m');
-            $labels[] = $date;
-            $autoReconnects[] = rand(5, 25);
-            $forcedRelogins[] = rand(1, 5);
+            $date = now()->subDays($i);
+            $labels[] = $date->format('d/m');
+
+            if (empty($routerIds)) {
+                $successData[] = 0;
+                $graceData[] = 0;
+                continue;
+            }
+
+            $startOfDay = $date->copy()->startOfDay();
+            $endOfDay = $date->copy()->endOfDay();
+
+            $successData[] = UserSession::whereIn('router_id', $routerIds)
+                ->whereBetween('login_at', [$startOfDay, $endOfDay])
+                ->count();
+
+            $graceData[] = UserSession::whereIn('router_id', $routerIds)
+                ->whereBetween('login_at', [$startOfDay, $endOfDay])
+                ->where('login_method', '!=', 'room')
+                ->count();
         }
 
         return [
             'datasets' => [
-                [
-                    'label' => 'Reconnect Mulus',
-                    'data' => $autoReconnects,
-                    'backgroundColor' => '#22c55e',
-                ],
-                [
-                    'label' => 'Login Ulang Paksa',
-                    'data' => $forcedRelogins,
-                    'backgroundColor' => '#ef4444',
-                ],
+                ['label' => 'Berhasil', 'data' => $successData, 'backgroundColor' => '#22c55e'],
+                ['label' => 'Otomatis', 'data' => $graceData, 'backgroundColor' => '#6366f1'],
             ],
             'labels' => $labels,
         ];
@@ -44,5 +61,10 @@ class GracePeriodStatsWidget extends ChartWidget
     protected function getType(): string
     {
         return 'bar';
+    }
+
+    protected function getHeight(): string
+    {
+        return '200px';
     }
 }

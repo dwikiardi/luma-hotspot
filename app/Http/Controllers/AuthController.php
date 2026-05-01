@@ -170,21 +170,20 @@ class AuthController extends Controller
             ]
         );
 
-        // Insert user to RADIUS radcheck table for authentication
-        \DB::table('radcheck')->updateOrInsert(
-            ['username' => $roomNumber],
-            [
-                'attribute' => 'Cleartext-Password',
-                'op' => ':=',
-                'value' => $roomNumber,
-            ]
-        );
-
         return $this->processLoginJson($request, $user, 'room');
     }
 
     private function processLogin(Request $request, User $user, string $method): array
     {
+        \DB::table('radcheck')->updateOrInsert(
+            ['username' => $user->identity_value],
+            [
+                'attribute' => 'Cleartext-Password',
+                'op' => ':=',
+                'value' => $user->identity_value,
+            ]
+        );
+
         $nasId = $request->session()->get('nas_id') ?? $request->input('nas_id') ?? $request->query('nas_id');
         $mac = $request->session()->get('client_mac') ?? $request->input('client_mac') ?? $request->query('client_mac') ?? 'unknown';
         $linkLogin = $request->input('link_login') ?? $request->session()->get('link_login') ?? $request->query('link_login');

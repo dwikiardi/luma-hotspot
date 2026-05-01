@@ -2,8 +2,13 @@
 
 namespace App\Filament\Admin\Pages;
 
+use App\Filament\Admin\Widgets\ActiveSessionsWidget;
 use App\Filament\Admin\Widgets\AlertsWidget;
+use App\Filament\Admin\Widgets\FingerprintScoreWidget;
+use App\Filament\Admin\Widgets\GracePeriodLogWidget;
 use App\Filament\Admin\Widgets\PlatformStatsWidget;
+use App\Filament\Admin\Widgets\RadiusAccountingWidget;
+use App\Filament\Admin\Widgets\RadiusAuthWidget;
 use App\Filament\Admin\Widgets\RealtimeVisitorWidget;
 use App\Filament\Admin\Widgets\ROIAggregateWidget;
 use App\Filament\Admin\Widgets\TenantGrowthChartWidget;
@@ -25,17 +30,12 @@ class Dashboard extends BaseDashboard
     public function getWidgets(): array
     {
         return [
-            // Row 1: Stats overview (full width)
             PlatformStatsWidget::class,
-            
-            // Row 2: Alerts and ROI (equal width)
-            AlertsWidget::class,
-            ROIAggregateWidget::class,
-            TopVenuesWidget::class,
-            
-            // Row 3-4: Charts (equal width, side by side)
-            RealtimeVisitorWidget::class,
-            TenantGrowthChartWidget::class,
+            ActiveSessionsWidget::class,
+            RadiusAuthWidget::class,
+            RadiusAccountingWidget::class,
+            GracePeriodLogWidget::class,
+            FingerprintScoreWidget::class,
         ];
     }
 
@@ -45,7 +45,7 @@ class Dashboard extends BaseDashboard
             'sm' => 1,
             'md' => 2,
             'lg' => 3,
-            'xl' => 3, // 3 columns for better equal sizing
+            'xl' => 3,
         ];
     }
 }
