@@ -1,0 +1,22 @@
+rest {
+    connect_uri = "http://luma_nginx:80"
+
+    tls {
+        check_cert = no
+    }
+
+    accounting {
+        uri = "${..connect_uri}/radius/accounting"
+        method = 'post'
+        body = 'json'
+        tls = ${..tls}
+    }
+}
+
+    accounting {
+        uri = "${..connect_uri}/radius/accounting"
+        method = 'post'
+        body = 'json'
+        tls = ${..tls}
+    }
+}

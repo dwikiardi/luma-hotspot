@@ -40,3 +40,39 @@ Schedule::call(function () {
         ->where('expires_at', '<', now())
         ->update(['status' => 'disconnected', 'disconnected_at' => now()]);
 })->everyMinute();
+
+// Sync radacct to user_sessions (fallback if rest module fails)
+Schedule::call(function () {
+    $records = \Illuminate\Support\Facades\DB::table('radacct')
+        ->whereNotNull('acctstoptime')
+        ->whereNull('acctsessiontime')
+        ->get();
+
+    foreach ($records as $rec) {
+        // Find user by username
+        $userId = \Illuminate\Support\Facades\DB::table('users')
+            ->where('identity_value', $rec->username)
+            ->value('id');
+
+        if (! $userId) {
+            continue;
+        }
+
+        // Update user session if exists and is active/disconnected
+        $updated = \App\Models\UserSession::where('user_id', $userId)
+            ->whereIn('status', ['active', 'disconnected'])
+            ->update([
+                'status' => 'disconnected',
+                'disconnected_at' => $rec->acctstoptime,
+                'mac_address' => $rec->callingstationid ?: \Illuminate\Support\Facades\DB::raw('mac_address'),
+                'ip_address' => $rec->framedipaddress ? preg_replace('/\/\d+$/', '', $rec->framedipaddress) : \Illuminate\Support\Facades\DB::raw('ip_address'),
+            ]);
+
+        // Mark as processed
+        if ($updated) {
+            \Illuminate\Support\Facades\DB::table('radacct')
+                ->where('radacctid', $rec->radacctid)
+                ->update(['acctsessiontime' => 1]);
+        }
+    }
+})->everyFiveMinutes();

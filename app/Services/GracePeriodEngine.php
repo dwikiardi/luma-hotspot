@@ -112,7 +112,20 @@ class GracePeriodEngine
         $config = $router->tenant->portalConfig;
         $sessionTimeout = $config->session_timeout ?? 14400;
 
-        $mac = $request->query('client_mac') ?? $request->input('client_mac') ?? 'unknown';
+        // Get MAC from multiple sources
+        $mac = $request->query('client_mac') 
+            ?? $request->input('client_mac') 
+            ?? $request->query('mac') 
+            ?? $request->input('mac') 
+            ?? $request->query('callingstationid') 
+            ?? 'unknown';
+
+        // Get real client IP from multiple sources
+        $clientIp = $request->query('ip') 
+            ?? $request->input('ip') 
+            ?? $request->header('X-Forwarded-For') 
+            ?? $request->header('X-Real-IP') 
+            ?? $request->ip();
 
         UserSession::where('user_id', $user->id)
             ->where('router_id', $router->id)
@@ -126,7 +139,7 @@ class GracePeriodEngine
             'mac_address' => $mac,
             'fingerprint_hash' => $request->header('X-Fingerprint') ?? $request->input('fingerprint') ?? ('fp-'.substr(md5($request->userAgent()), 0, 16)),
             'cookie_token' => UserSession::generateCookieToken(),
-            'ip_address' => $request->ip(),
+            'ip_address' => $clientIp,
             'login_at' => now(),
             'last_seen_at' => now(),
             'expires_at' => now()->addSeconds($sessionTimeout),

@@ -19,9 +19,15 @@ class PortalController extends Controller
     public function show(Request $request)
     {
         $nasId = $request->query('nas_id');
-        $mac = $request->query('client_mac');
+        $mac = $request->query('client_mac') ?? $request->query('mac') ?? $request->query('callingstationid') ?? 'unknown';
         $linkLogin = $request->query('link_login');
         $dstUrl = $request->query('dst') ?? $request->query('redirect') ?? 'https://www.google.com';
+
+        // Get real client IP from various sources
+        $clientIp = $request->query('ip') 
+            ?? $request->header('X-Forwarded-For') 
+            ?? $request->header('X-Real-IP') 
+            ?? $request->ip();
 
         if (! $nasId) {
             return response()->view('portal', [
@@ -71,7 +77,7 @@ class PortalController extends Controller
             'tenant_id' => $router->tenant_id,
             'router_id' => $router->id,
             'mac' => $mac,
-            'ip' => $request->ip(),
+            'ip' => $clientIp,
         ]);
 
         $graceResult = $this->graceEngine->check($request, $router);
@@ -136,7 +142,7 @@ class PortalController extends Controller
                     ));
             }
 
-            return $this->silentAutoLogin($request, $session, $router, $linkLogin, $dstUrl);
+            return $this->silentAutoLogin($request, $session, $router, $linkLogin, $dstUrl, $clientIp);
         }
 
         $config = $router->tenant->portalConfig;
@@ -154,7 +160,7 @@ class PortalController extends Controller
         }
 
         $relayInfo = $this->parseOption82($request);
-        $serverFingerprint = $this->buildServerFingerprint($request, $relayInfo);
+        $serverFingerprint = $this->buildServerFingerprint($request, $relayInfo, $clientIp, $mac);
 
         return view('portal', [
             'methods' => $methods,
@@ -175,7 +181,7 @@ class PortalController extends Controller
         ]);
     }
 
-    private function silentAutoLogin(Request $request, $session, Router $router, ?string $linkLogin, string $dstUrl)
+    private function silentAutoLogin(Request $request, $session, Router $router, ?string $linkLogin, string $dstUrl, string $clientIp)
     {
         $user = User::find($session->user_id);
 
@@ -199,7 +205,7 @@ class PortalController extends Controller
             'user_id' => $session->user_id,
             'device_id' => $session->device_id,
             'mac' => $session->mac_address,
-            'ip' => $request->ip(),
+            'ip' => $clientIp,
             'redirect_url' => $redirectUrl,
         ]);
 
@@ -269,12 +275,12 @@ class PortalController extends Controller
         ];
     }
 
-    private function buildServerFingerprint(Request $request, array $relay): array
+    private function buildServerFingerprint(Request $request, array $relay, string $clientIp, string $mac): array
     {
         return [
-            'ip' => $request->ip(),
+            'ip' => $clientIp,
             'user_agent' => $request->userAgent(),
-            'mac' => $request->query('client_mac'),
+            'mac' => $mac,
             'nas_id' => $request->query('nas_id'),
             'accept_lang' => $request->header('Accept-Language'),
             'room_hint' => $relay['room_number'],
