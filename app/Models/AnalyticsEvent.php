@@ -23,6 +23,7 @@ class AnalyticsEvent extends Model
     protected $casts = [
         'meta' => 'array',
         'occurred_at' => 'datetime',
+        'ip_address' => 'string',
     ];
 
     public function tenant(): BelongsTo

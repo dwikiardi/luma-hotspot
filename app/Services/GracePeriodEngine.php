@@ -120,12 +120,13 @@ class GracePeriodEngine
             ?? $request->query('callingstationid') 
             ?? 'unknown';
 
-        // Get real client IP from multiple sources
+        // Get real client IP from multiple sources (never empty string)
         $clientIp = $request->query('ip') 
             ?? $request->input('ip') 
             ?? $request->header('X-Forwarded-For') 
             ?? $request->header('X-Real-IP') 
             ?? $request->ip();
+        $clientIp = !empty($clientIp) ? $clientIp : null;
 
         UserSession::where('user_id', $user->id)
             ->where('router_id', $router->id)

@@ -211,7 +211,7 @@ class AuthController extends Controller
             'user_id' => $user->id,
             'device_id' => $device->id,
             'mac' => $mac,
-            'ip' => $request->ip(),
+            'ip' => $request->ip() ?: null,
             'login_method' => $method,
         ]);
 

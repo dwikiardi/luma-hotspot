@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ $branding['name'] ?? 'Guest WiFi' }} - Luma Network</title>
-<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@2.8.2/dist/alpine.min.js"></script>
     <script defer src="/js/fingerprintjs.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -172,7 +171,7 @@
     @if($isCNA && $isIOS)
         @include('portal.cna_bridge')
     @else
-    <div x-data="portalApp()" x-init="init()" class="portal-container">
+    <div  class="portal-container">
         <header class="header">
             <div class="logo">
                 @if(!empty($branding['logo']))
@@ -210,10 +209,10 @@
                         <button onclick="window.open('{{ url('/portal?nas_id=' . urlencode($nasId) . '&client_mac=' . urlencode($mac ?? '')) }}', '_blank')" class="btn btn-wa">Buka di Browser</button>
                     </div>
                 @else
-                    <div id="errorMsg" class="error-msg" x-show="error" x-text="error"></div>
-                    <div id="successMsg" class="success-msg" x-show="success" x-text="success"></div>
+                    <div id="errorMsg" class="error-msg" id="errorMsg"></div>
+                    <div id="successMsg" class="success-msg" id="successMsg"></div>
 
-                    <template x-if="showSuccess">
+                    <div id="successOverlay" style="display:none">
                         <div class="success-overlay">
                             <div class="success-card">
                                 <div class="success-icon">
@@ -224,7 +223,7 @@
                                 <div class="success-countdown">Mengalihkan dalam <span x-text="countdown"></span> detik...</div>
                             </div>
                         </div>
-                    </template>
+                    </div>
 
                     @if(($methods['google'] ?? false))
                         <a href="{{ route('login.google', ['nas_id' => $nasId, 'client_mac' => $mac ?? '']) }}" class="btn btn-google">
@@ -234,65 +233,65 @@
                     @endif
 
                     @if(($methods['wa'] ?? false))
-                        <button @click="showWaForm = true; showRoomForm = false" class="btn btn-wa">
+                        <button onclick="toggleForm('wa')" class="btn btn-wa">
                             <svg viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
                             Masuk dengan WhatsApp
                         </button>
                     @endif
 
                     @if(($methods['room'] ?? false) && ($customLoginEnabled ?? false))
-                        <button @click="showRoomForm = true; showWaForm = false" class="btn btn-room">
+                        <button onclick="toggleForm('room')" class="btn btn-room">
                             <svg viewBox="0 0 24 24" fill="white"><path d="M7 14c1.66 0 3-1.34 3-3S8.66 8 7 8s-3 1.34-3 3 1.34 3 3 3zm0-4c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm12-3h-8v8H3V5H1v15h2v-3h18v3h2v-9c0-2.21-1.79-4-4-4zm2 8h-8V9h6c1.1 0 2 .9 2 2v4z"/></svg>
                             {{ $customLoginLabel ?? 'Nomor Kamar' }}
                         </button>
                     @endif
 
-                    <div class="form-section" :class="{ 'active': showWaForm }">
-                        <div class="back-btn" @click="showWaForm = false; showRoomForm = false">
+                    <div class="form-section" id="waFormSection" style="display:none">
+                        <div class="back-btn" onclick="toggleForm('none')">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
                             Kembali
                         </div>
                         
-                        <div x-show="!showWaVerify">
+                        <div id="waPhoneInput">
                             <div class="form-group">
                                 <label class="form-label">Nomor WhatsApp</label>
-                                <input type="tel" class="form-input" placeholder="08xxxxxxxxxx" x-model="waPhone" maxlength="15">
+                                <input type="tel" class="form-input" placeholder="08xxxxxxxxxx" id="waPhoneInputField" maxlength="15">
                             </div>
-                            <button @click="requestOtp()" class="form-submit" :disabled="loading">
-                                <span x-show="!loading">Kirim OTP</span>
-                                <span x-show="loading" class="spinner"></span>
+                            <button onclick="requestOtp()" class="form-submit" id="submitBtn">
+                                <span class="btn-text">Kirim OTP</span>
+                                <span class="spinner" style="display:none"></span>
                             </button>
                         </div>
 
-                        <div x-show="showWaVerify">
+                        <div id="waVerifyInput" style="display:none">
                             <div class="form-group">
                                 <label class="form-label">Masukkan kode OTP</label>
                                 <div class="otp-inputs">
-                                    <template x-for="(digit, index) in otpDigits" :key="index">
-                                        <input type="text" maxlength="1" class="otp-input" x-model="otpDigits[index]" @input="handleOtpInput($event, index)" @keydown="handleOtpKeydown($event, index)">
-                                    </template>
+                                    <div id="otpContainer">
+                                        <input type="text" maxlength="1" class="otp-input" class="otp-input" oninput="handleOtpInput(event, this)" onkeydown="handleOtpKeydown(event, this)">
+                                    </div>
                                 </div>
                             </div>
-                            <button @click="verifyOtp()" class="form-submit" :disabled="loading">
-                                <span x-show="!loading">Verifikasi</span>
-                                <span x-show="loading" class="spinner"></span>
+                            <button onclick="verifyOtp()" class="form-submit" id="submitBtn">
+                                <span class="btn-text">Verifikasi</span>
+                                <span class="spinner" style="display:none"></span>
                             </button>
                         </div>
                     </div>
 
-                    <div class="form-section" :class="{ 'active': showRoomForm }">
-                        <div class="back-btn" @click="showRoomForm = false; showWaForm = false">
+                    <div class="form-section" id="roomFormSection" style="display:none">
+                        <div class="back-btn" onclick="toggleForm('none')">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
                             Kembali
                         </div>
                         
                         <div class="form-group">
                             <label class="form-label">{{ $customLoginLabel ?? 'Nomor Kamar' }}</label>
-                            <input type="text" class="form-input" placeholder="{{ $customLoginPlaceholder ?? 'Contoh: 101' }}" x-model="roomNumber">
+                            <input type="text" class="form-input" placeholder="{{ $customLoginPlaceholder ?? 'Contoh: 101' }}" id="roomInput">
                         </div>
-                        <button @click="loginRoom()" class="form-submit" :disabled="loading">
-                            <span x-show="!loading">Masuk</span>
-                            <span x-show="loading" class="spinner"></span>
+                        <button onclick="loginRoom()" class="form-submit" id="submitBtn">
+                            <span class="btn-text">Masuk</span>
+                            <span class="spinner" style="display:none"></span>
                         </button>
                     </div>
                 @endif
@@ -305,243 +304,75 @@
     </div>
 
     <script>
-        window.portalApp = function() {
-            return {
-                showWaForm: false,
-                showRoomForm: false,
-                showWaVerify: false,
-                waPhone: '',
-                roomNumber: '',
-                otpDigits: ['', '', '', '', '', ''],
-                loading: false,
-                error: '',
-                success: '',
-                showSuccess: false,
-                successMessage: '',
-                countdown: 3,
-                fingerprint: '',
-                trustScore: 50,
-                fingerprintData: {},
-                linkLogin: '{{ $linkLogin ?? "" }}',
-                dstUrl: '{{ $dstUrl ?? "https://www.google.com" }}',
-                roomLoginUrl: '',
-                roomLoginUrl: '',
+        // Global state
+        var showWaForm = false, showRoomForm = false, showWaVerify = false;
+        var waPhone = "", roomNumber = "", loading = false;
+        var fingerprint = "", trustScore = 50;
+        var linkLogin = "", dstUrl = "https://www.google.com";
+        var otpDigits = ["", "", "", "", "", ""];
 
-                async init() {
-                    await this.collectFingerprint();
-                },
-
-                async collectFingerprint() {
-                    try {
-                        if (typeof FingerprintJS !== 'undefined') {
-                            const fp = await FingerprintJS.load();
-                            const result = await fp.get();
-                            this.fingerprintData = {
-                                visitor_id: result.visitorId || '',
-                                screen_resolution: screen.width + 'x' + screen.height,
-                                color_depth: screen.colorDepth,
-                                device_memory: navigator.deviceMemory || null,
-                                hardware_concurrency: navigator.hardwareConcurrency || null,
-                                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-                                languages: navigator.languages ? navigator.languages.join(',') : navigator.language,
-                                touch_support: 'ontouchstart' in window || navigator.maxTouchPoints > 0,
-                                platform: navigator.platform || '',
-                                os_name: this.getOSName(),
-                                os_version: this.getOSVersion(),
-                                browser_name: this.getBrowserName(),
-                                browser_version: this.getBrowserVersion(),
-                                user_agent: navigator.userAgent,
-                                nas_id: '{{ $nasId }}',
-                                mac: '{{ $mac ?? "" }}',
-                            };
-                            
-                            const canvas = document.createElement('canvas');
-                            const ctx = canvas.getContext('2d');
-                            ctx.textBaseline = 'top';
-                            ctx.font = '14px Arial';
-                            ctx.fillText('fingerprint', 2, 2);
-                            this.fingerprintData.canvas_hash = this.hashString(canvas.toDataURL());
-                            
-                            const glCanvas = document.createElement('canvas');
-                            const gl = glCanvas.getContext('webgl') || glCanvas.getContext('experimental-webgl');
-                            if (gl) {
-                                const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
-                                if (debugInfo) {
-                                    this.fingerprintData.webgl_vendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) || '';
-                                    this.fingerprintData.webgl_renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) || '';
-                                }
-                                this.fingerprintData.webgl_hash = this.hashString(this.fingerprintData.webgl_vendor + this.fingerprintData.webgl_renderer);
-                            }
-                            
-                            try {
-                                const response = await fetch('/api/fingerprint/analyze', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify(this.fingerprintData)
-                                });
-                                const data = await response.json();
-                                this.fingerprint = data.fingerprint_hash || result.visitorId;
-                                this.trustScore = data.trust_score || 50;
-                            } catch (e) {
-                                this.fingerprint = result.visitorId || this.hashString(navigator.userAgent + screen.width);
-                            }
-                        } else {
-                            this.fingerprint = this.hashString(navigator.userAgent + screen.width + screen.height);
-                        }
-                    } catch (e) {
-                        this.fingerprint = this.hashString(navigator.userAgent + Date.now());
-                    }
-                },
-
-                getOSName() {
-                    const ua = navigator.userAgent;
-                    if (ua.includes('Windows')) return 'Windows';
-                    if (ua.includes('Mac')) return 'macOS';
-                    if (ua.includes('Linux')) return 'Linux';
-                    if (ua.includes('Android')) return 'Android';
-                    if (ua.includes('iOS') || ua.includes('iPhone') || ua.includes('iPad')) return 'iOS';
-                    return 'Unknown';
-                },
-
-                getOSVersion() {
-                    const ua = navigator.userAgent;
-                    const match = ua.match(/(Windows NT|Mac OS X|Android|iOS)[\s]*([\d._]+)/);
-                    return match ? match[2].replace(/_/g, '.') : '';
-                },
-
-                getBrowserName() {
-                    const ua = navigator.userAgent;
-                    if (ua.includes('Chrome') && !ua.includes('Edg')) return 'Chrome';
-                    if (ua.includes('Firefox')) return 'Firefox';
-                    if (ua.includes('Safari') && !ua.includes('Chrome')) return 'Safari';
-                    if (ua.includes('Edg')) return 'Edge';
-                    if (ua.includes('Opera') || ua.includes('OPR')) return 'Opera';
-                    return 'Unknown';
-                },
-
-                getBrowserVersion() {
-                    const ua = navigator.userAgent;
-                    const match = ua.match(/(Chrome|Firefox|Safari|Edge|Edg|Opera|OPR)[\/](\d+)/);
-                    return match ? match[2] : '';
-                },
-
-                hashString(str) {
-                    let hash = 0;
-                    for (let i = 0; i < str.length; i++) {
-                        const char = str.charCodeAt(i);
-                        hash = ((hash << 5) - hash) + char;
-                        hash = hash & hash;
-                    }
-                    return Math.abs(hash).toString(16);
-                },
-
-                async requestOtp() {
-                    if (!this.waPhone || this.waPhone.length < 10) {
-                        this.error = 'Masukkan nomor WhatsApp yang valid';
-                        return;
-                    }
-                    this.loading = true;
-                    this.error = '';
-                    try {
-                        const response = await fetch('/auth/wa/request', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json', 'X-Fingerprint': this.fingerprint, 'X-Trust-Score': this.trustScore },
-                            body: JSON.stringify({ phone: this.waPhone, nas_id: '{{ $nasId }}', client_mac: '{{ $mac ?? "" }}', link_login: this.linkLogin, dst: this.dstUrl }),
-                        });
-                        const data = await response.json();
-                        if (data.success) {
-                            this.showWaVerify = true;
-                            this.success = 'OTP berhasil dikirim';
-                            setTimeout(() => this.success = '', 3000);
-                        } else {
-                            this.error = data.message || 'Gagal mengirim OTP';
-                        }
-                    } catch (e) { this.error = 'Terjadi kesalahan. Coba lagi.'; }
-                    finally { this.loading = false; }
-                },
-
-                handleOtpInput(event, index) {
-                    const value = event.target.value;
-                    if (value && index < 5) {
-                        const inputs = event.target.parentElement.children;
-                        inputs[index + 1].focus();
-                    }
-                },
-
-                handleOtpKeydown(event, index) {
-                    if (event.key === 'Backspace' && !event.target.value && index > 0) {
-                        const inputs = event.target.parentElement.children;
-                        inputs[index - 1].focus();
-                    }
-                },
-
-                async verifyOtp() {
-                    const otp = this.otpDigits.join('');
-                    if (otp.length !== 6) { this.error = 'Masukkan 6 digit OTP'; return; }
-                    this.loading = true;
-                    this.error = '';
-                    try {
-                        const response = await fetch('/auth/wa/verify', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json', 'X-Fingerprint': this.fingerprint, 'X-Trust-Score': this.trustScore },
-                            body: JSON.stringify({ otp: otp, nas_id: '{{ $nasId }}', client_mac: '{{ $mac ?? "" }}', link_login: this.linkLogin, dst: this.dstUrl }),
-                        });
-                        const data = await response.json();
-                        if (data.redirect) {
-                            this.showSuccess = true;
-                            this.successMessage = 'Selamat datang! Anda akan terhubung ke internet.';
-                            this.startRedirect(data.redirect);
-                        } else if (data.success) {
-                            this.showSuccess = true;
-                            this.successMessage = 'Login berhasil!';
-                            this.startRedirect('https://www.google.com');
-                        } else { this.error = data.message || 'OTP tidak valid'; }
-                    } catch (e) { this.error = 'Terjadi kesalahan. Coba lagi.'; }
-                    finally { this.loading = false; }
-                },
-
-                startRedirect(url) {
-                    this.countdown = 3;
-                    const interval = setInterval(() => {
-                        this.countdown--;
-                        if (this.countdown <= 0) {
-                            clearInterval(interval);
-                            window.location.href = url;
-                        }
-                    }, 1000);
-                },
-
-                    loginRoom() {
-                        if (!this.roomNumber) { this.error = 'Masukan nomor kamar'; return; }
-                        this.loading = true;
-                        this.error = '';
-                        try {
-                            const response = await fetch('/auth/room', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json', 'X-Fingerprint': this.fingerprint, 'X-Trust-Score': this.trustScore },
-                                body: JSON.stringify({ 
-                                    room_number: this.roomNumber, 
-                                    nas_id: '{{ $nasId }}', 
-                                    client_mac: '{{ $mac ?? "" }}', 
-                                    link_login: '{{ $linkLogin ?? "" }}', 
-                                    dst: '{{ $dstUrl ?? "https://www.google.com" }}'
-                                }),
-                            });
-                            const data = await response.json();
-                            if (data.redirect) {
-                                this.showSuccess = true;
-                                this.successMessage = 'Selamat datang! Anda akan terhubung ke internet.';
-                                this.startRedirect(data.redirect);
-                            } else if (data.success) {
-                                this.showSuccess = true;
-                                this.successMessage = 'Login berhasil!';
-                                this.startRedirect('https://www.google.com');
-                            } else { this.error = data.message || 'Login gagal'; }
-                        } catch (e) { this.error = 'Terjadi kesalahan. Coba lagi.'; }
-                        finally { this.loading = false; }
-                    },
-            }
+        function showError(msg) {
+            var el = document.getElementById("errorMsg");
+            if (el) { el.textContent = msg; el.style.display = msg ? "block" : "none"; }
         }
+        function showSuccess(msg) {
+            var el = document.getElementById("successMsg");
+            if (el) { el.textContent = msg; el.style.display = msg ? "block" : "none"; }
+        }
+
+        function toggleForm(type) {
+            var waForm = document.getElementById("waFormSection");
+            var roomForm = document.getElementById("roomFormSection");
+            if (waForm) waForm.style.display = (type === "wa") ? "block" : "none";
+            if (roomForm) roomForm.style.display = (type === "room") ? "block" : "none";
+        }
+
+        function hashString(str) {
+            var h = 0;
+            for (var i = 0; i < str.length; i++) {
+                var c = str.charCodeAt(i);
+                h = ((h << 5) - h) + c;
+                h = h & h;
+            }
+            return Math.abs(h).toString(16);
+        }
+
+        function loginRoom() {
+            var input = document.getElementById("roomInput");
+            if (!input || !input.value) { showError("Masukkan nomor kamar"); return; }
+            loading = true;
+            showError("");
+            fetch("/auth/room", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    room_number: input.value,
+                    nas_id: "{{ $nasId }}",
+                    client_mac: "'{{ $mac ?? "" }}'",
+                    link_login: "{{ $linkLogin ?? "" }}",
+                    dst: "'{{ $dstUrl ?? "https://www.google.com" }}'"
+                })
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                loading = false;
+                if (data.redirect) {
+                    var overlay = document.getElementById("successOverlay");
+                    if (overlay) overlay.style.display = "flex";
+                    setTimeout(function() { window.location.href = data.redirect; }, 2000);
+                } else if (data.success) {
+                    window.location.href = "https://www.google.com";
+                } else {
+                    showError(data.message || "Login gagal");
+                }
+            })
+            .catch(function() { showError("Terjadi kesalahan"); loading = false; });
+        }
+
+        function requestOtp() {}
+        function verifyOtp() {}
+        function handleOtpInput(e, el) {}
+        function handleOtpKeydown(e, el) {}
     </script>
     @endif
 </body>

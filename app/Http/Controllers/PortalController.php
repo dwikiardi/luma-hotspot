@@ -206,7 +206,7 @@ class PortalController extends Controller
             'user_id' => $session->user_id,
             'device_id' => $session->device_id,
             'mac' => $session->mac_address,
-            'ip' => $clientIp,
+            'ip' => $clientIp ?: null,
             'redirect_url' => $redirectUrl,
         ]);
 
