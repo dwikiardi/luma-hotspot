@@ -344,7 +344,7 @@
             showError("");
             fetch("/auth/room", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json", "X-Fingerprint": fingerprint },
                 body: JSON.stringify({
                     room_number: input.value,
                     nas_id: "{{ $nasId }}",

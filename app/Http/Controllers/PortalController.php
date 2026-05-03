@@ -182,7 +182,7 @@ $cookie = $request->cookie('luma_session');
         ]);
     }
 
-    private function silentAutoLogin(Request $request, $session, Router $router, ?string $linkLogin, string $dstUrl, string $clientIp)
+    private function silentAutoLogin(Request $request, $session, Router $router, ?string $linkLogin, string $dstUrl, ?string $clientIp)
     {
         $user = User::find($session->user_id);
 

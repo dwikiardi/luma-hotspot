@@ -85,8 +85,14 @@ class GracePeriodEngine
                 }
             }
 
-            // Threshold lebih rendah jika MAC tidak diketahui
-            $threshold = $hasValidMac ? 3 : 2;
+            // Threshold: MAC known=3, MAC unknown=2, fingerprint present=2
+            $threshold = 3;
+            if (!$hasValidMac) {
+                $threshold = 2;
+            }
+            if ($fingerprint) {
+                $threshold = min($threshold, 2);
+            }
 
             if ($score >= $threshold) {
                 return GraceCheckResult::autoLogin($session);
