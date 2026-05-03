@@ -148,6 +148,21 @@ class GracePeriodEngine
             ->where('status', 'active')
             ->update(['status' => 'disconnected', 'disconnected_at' => now()]);
 
+        // Expire session disconnected lama (keep only 1 most recent)
+        $keepDisconnected = UserSession::where('user_id', $user->id)
+            ->where('router_id', $router->id)
+            ->where('status', 'disconnected')
+            ->orderByDesc('disconnected_at')
+            ->first();
+
+        if ($keepDisconnected) {
+            UserSession::where('user_id', $user->id)
+                ->where('router_id', $router->id)
+                ->where('status', 'disconnected')
+                ->where('id', '!=', $keepDisconnected->id)
+                ->update(['status' => 'expired']);
+        }
+
         return UserSession::create([
             'user_id' => $user->id,
             'device_id' => $device->id,
