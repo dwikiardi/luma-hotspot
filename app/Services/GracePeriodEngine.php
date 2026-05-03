@@ -42,7 +42,6 @@ class GracePeriodEngine
         $nasId = $router->nas_identifier;
 
         $config = $router->tenant->portalConfig;
-        $graceSeconds = $config->grace_period_seconds;
 
         $sessions = UserSession::where('status', 'disconnected')
             ->where('expires_at', '>', now())
@@ -50,10 +49,12 @@ class GracePeriodEngine
             ->orderByDesc('disconnected_at')
             ->get();
 
+        $hasValidMac = $mac && $mac !== 'unknown';
+
         foreach ($sessions as $session) {
             $score = 0;
 
-            if ($mac && $mac !== 'unknown' && $session->mac_address === $mac) {
+            if ($hasValidMac && $session->mac_address === $mac) {
                 $score += 4;
             }
 
@@ -74,7 +75,20 @@ class GracePeriodEngine
                 $score += 1;
             }
 
-            if ($score >= 3) {
+            // Fallback: jika MAC tidak diketahui, cocokkan berdasarkan username yang sama di router yang sama
+            if (!$hasValidMac && $cookie) {
+                $cookieSession = UserSession::where('cookie_token', $cookie)
+                    ->where('router_id', $router->id)
+                    ->first();
+                if ($cookieSession && $cookieSession->user_id === $session->user_id) {
+                    $score += 3;
+                }
+            }
+
+            // Threshold lebih rendah jika MAC tidak diketahui
+            $threshold = $hasValidMac ? 3 : 2;
+
+            if ($score >= $threshold) {
                 return GraceCheckResult::autoLogin($session);
             }
         }

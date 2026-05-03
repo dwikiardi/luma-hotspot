@@ -348,9 +348,9 @@
                 body: JSON.stringify({
                     room_number: input.value,
                     nas_id: "{{ $nasId }}",
-                    client_mac: "'{{ $mac ?? "" }}'",
+                    client_mac: "{{ $mac ?? "" }}",
                     link_login: "{{ $linkLogin ?? "" }}",
-                    dst: "'{{ $dstUrl ?? "https://www.google.com" }}'"
+                    dst: "{{ $dstUrl ?? "https://www.google.com" }}"
                 })
             })
             .then(function(r) { return r.json(); })
