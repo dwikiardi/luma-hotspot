@@ -36,6 +36,7 @@ class VisitorSessionResource extends Resource
 
                 return UserSession::whereIn('router_id', $routerIds)
                     ->with(['user', 'router'])
+                    ->whereIn('status', ['active', 'disconnected'])
                     ->orderBy('login_at', 'desc');
             })
             ->columns([
