@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ $branding['name'] ?? 'Guest WiFi' }} - Luma Network</title>
-    <script defer src="/js/alpine.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@2.8.2/dist/alpine.min.js"></script>
     <script defer src="/js/fingerprintjs.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -305,7 +305,7 @@
     </div>
 
     <script>
-        function portalApp() {
+        window.portalApp = function() {
             return {
                 showWaForm: false,
                 showRoomForm: false,
@@ -324,6 +324,8 @@
                 fingerprintData: {},
                 linkLogin: '{{ $linkLogin ?? "" }}',
                 dstUrl: '{{ $dstUrl ?? "https://www.google.com" }}',
+                roomLoginUrl: '',
+                roomLoginUrl: '',
 
                 async init() {
                     await this.collectFingerprint();
@@ -509,29 +511,35 @@
                     }, 1000);
                 },
 
-                async loginRoom() {
-                    if (!this.roomNumber) { this.error = 'Masukkan nomor kamar'; return; }
-                    this.loading = true;
-                    this.error = '';
-                    try {
-                        const response = await fetch('/auth/room', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json', 'X-Fingerprint': this.fingerprint, 'X-Trust-Score': this.trustScore },
-                            body: JSON.stringify({ room_number: this.roomNumber, nas_id: '{{ $nasId }}', client_mac: '{{ $mac ?? "" }}', link_login: this.linkLogin, dst: this.dstUrl }),
-                        });
-                        const data = await response.json();
-                        if (data.redirect) {
-                            this.showSuccess = true;
-                            this.successMessage = 'Selamat datang! Anda akan terhubung ke internet.';
-                            this.startRedirect(data.redirect);
-                        } else if (data.success) {
-                            this.showSuccess = true;
-                            this.successMessage = 'Login berhasil!';
-                            this.startRedirect('https://www.google.com');
-                        } else { this.error = data.message || 'Login gagal'; }
-                    } catch (e) { this.error = 'Terjadi kesalahan. Coba lagi.'; }
-                    finally { this.loading = false; }
-                },
+                    loginRoom() {
+                        if (!this.roomNumber) { this.error = 'Masukan nomor kamar'; return; }
+                        this.loading = true;
+                        this.error = '';
+                        try {
+                            const response = await fetch('/auth/room', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', 'X-Fingerprint': this.fingerprint, 'X-Trust-Score': this.trustScore },
+                                body: JSON.stringify({ 
+                                    room_number: this.roomNumber, 
+                                    nas_id: '{{ $nasId }}', 
+                                    client_mac: '{{ $mac ?? "" }}', 
+                                    link_login: '{{ $linkLogin ?? "" }}', 
+                                    dst: '{{ $dstUrl ?? "https://www.google.com" }}'
+                                }),
+                            });
+                            const data = await response.json();
+                            if (data.redirect) {
+                                this.showSuccess = true;
+                                this.successMessage = 'Selamat datang! Anda akan terhubung ke internet.';
+                                this.startRedirect(data.redirect);
+                            } else if (data.success) {
+                                this.showSuccess = true;
+                                this.successMessage = 'Login berhasil!';
+                                this.startRedirect('https://www.google.com');
+                            } else { this.error = data.message || 'Login gagal'; }
+                        } catch (e) { this.error = 'Terjadi kesalahan. Coba lagi.'; }
+                        finally { this.loading = false; }
+                    },
             }
         }
     </script>

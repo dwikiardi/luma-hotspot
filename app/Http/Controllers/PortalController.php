@@ -23,11 +23,12 @@ class PortalController extends Controller
         $linkLogin = $request->query('link_login');
         $dstUrl = $request->query('dst') ?? $request->query('redirect') ?? 'https://www.google.com';
 
-        // Get real client IP from various sources
+        // Get real client IP from various sources (never empty string)
         $clientIp = $request->query('ip') 
             ?? $request->header('X-Forwarded-For') 
             ?? $request->header('X-Real-IP') 
             ?? $request->ip();
+        $clientIp = $clientIp ?: null;
 
         if (! $nasId) {
             return response()->view('portal', [
@@ -77,7 +78,7 @@ class PortalController extends Controller
             'tenant_id' => $router->tenant_id,
             'router_id' => $router->id,
             'mac' => $mac,
-            'ip' => $clientIp,
+            'ip' => $clientIp ?: null,
         ]);
 
         $graceResult = $this->graceEngine->check($request, $router);
@@ -275,10 +276,10 @@ class PortalController extends Controller
         ];
     }
 
-    private function buildServerFingerprint(Request $request, array $relay, string $clientIp, string $mac): array
+    private function buildServerFingerprint(Request $request, array $relay, ?string $clientIp, string $mac): array
     {
         return [
-            'ip' => $clientIp,
+            'ip' => $clientIp ?? $request->ip(),
             'user_agent' => $request->userAgent(),
             'mac' => $mac,
             'nas_id' => $request->query('nas_id'),

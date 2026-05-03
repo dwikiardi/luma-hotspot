@@ -18,7 +18,7 @@ class AnalyticsEngine
             'device_id' => $context['device_id'] ?? null,
             'event_type' => $eventType,
             'mac_address' => $context['mac'] ?? null,
-            'ip_address' => $context['ip'] ?? null,
+            'ip_address' => !empty($context['ip']) ? $context['ip'] : null,
             'login_method' => $context['login_method'] ?? null,
             'meta' => $context['meta'] ?? null,
             'occurred_at' => now(),
