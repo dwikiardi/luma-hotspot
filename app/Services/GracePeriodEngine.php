@@ -142,6 +142,12 @@ class GracePeriodEngine
             ?? $request->ip();
         $clientIp = !empty($clientIp) ? $clientIp : null;
 
+        // Disconnect session active sebelumnya untuk user ini
+        UserSession::where('user_id', $user->id)
+            ->where('router_id', $router->id)
+            ->where('status', 'active')
+            ->update(['status' => 'disconnected', 'disconnected_at' => now()]);
+
         return UserSession::create([
             'user_id' => $user->id,
             'device_id' => $device->id,
