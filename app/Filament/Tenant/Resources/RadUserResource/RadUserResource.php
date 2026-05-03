@@ -98,7 +98,22 @@ class RadUserResource extends Resource
                         'email' => 'Email',
                     ]),
             ])
-            ->defaultSort('id', 'desc');
+            ->defaultSort('id', 'desc')
+            ->actions([
+                Tables\Actions\EditAction::make()
+                    ->label('Edit'),
+                Tables\Actions\DeleteAction::make()
+                    ->label('Hapus')
+                    ->modalHeading('Hapus pengguna ini?')
+                    ->modalDescription('Semua data pengguna termasuk sesi akan dihapus.')
+                    ->successNotificationTitle('Pengguna berhasil dihapus'),
+            ])
+            ->bulkActions([
+                Tables\Actions\DeleteBulkAction::make()
+                    ->label('Hapus yang dipilih')
+                    ->modalHeading('Hapus pengguna yang dipilih?')
+                    ->modalDescription('Semua data akan dihapus permanen.'),
+            ]);
     }
 
     public static function form(Forms\Form $form): Forms\Form

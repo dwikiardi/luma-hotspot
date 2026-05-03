@@ -130,7 +130,20 @@ class VisitorSessionResource extends Resource
                     ->options(["google" => "Google", "wa" => "WhatsApp", "facebook" => "Facebook", "instagram" => "Instagram", "email" => "Email", "room" => "Nomor Kamar"]),
             ])
             ->defaultSort("login_at", "desc")
-            ->paginated([15, 25, 50]);
+            ->paginated([15, 25, 50])
+            ->actions([
+                Tables\Actions\DeleteAction::make()
+                    ->label('Hapus')
+                    ->modalHeading('Hapus sesi ini?')
+                    ->modalDescription('Sesi akan dihapus permanen dari database.')
+                    ->successNotificationTitle('Sesi berhasil dihapus'),
+            ])
+            ->bulkActions([
+                Tables\Actions\DeleteBulkAction::make()
+                    ->label('Hapus yang dipilih')
+                    ->modalHeading('Hapus sesi yang dipilih?')
+                    ->modalDescription('Semua sesi yang dipilih akan dihapus permanen.'),
+            ]);
     }
 
     public static function getPages(): array
