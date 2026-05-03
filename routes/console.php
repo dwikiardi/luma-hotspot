@@ -41,15 +41,18 @@ Schedule::call(function () {
         ->update(['status' => 'disconnected', 'disconnected_at' => now()]);
 })->everyMinute();
 
-// Sync radacct to user_sessions (fallback if rest module fails)
+// Sync radacct to user_sessions: update MAC/IP untuk semua session aktif/baru
 Schedule::call(function () {
     $records = \Illuminate\Support\Facades\DB::table('radacct')
-        ->whereNotNull('acctstoptime')
-        ->whereNull('acctsessiontime')
+        ->whereNotNull('callingstationid')
+        ->where('callingstationid', '!=', '')
+        ->whereNotNull('framedipaddress')
+        ->where('framedipaddress', '!=', '')
+        ->orderByDesc('radacctid')
+        ->limit(50)
         ->get();
 
     foreach ($records as $rec) {
-        // Find user by username
         $userId = \Illuminate\Support\Facades\DB::table('users')
             ->where('identity_value', $rec->username)
             ->value('id');
@@ -58,21 +61,37 @@ Schedule::call(function () {
             continue;
         }
 
-        // Update user session if exists and is active/disconnected
-        $updated = \App\Models\UserSession::where('user_id', $userId)
+        $ip = preg_replace('/\/\d+$/', '', $rec->framedipaddress);
+
+        \App\Models\UserSession::where('user_id', $userId)
             ->whereIn('status', ['active', 'disconnected'])
             ->update([
-                'status' => 'disconnected',
-                'disconnected_at' => $rec->acctstoptime,
-                'mac_address' => $rec->callingstationid ?: \Illuminate\Support\Facades\DB::raw('mac_address'),
-                'ip_address' => $rec->framedipaddress ? preg_replace('/\/\d+$/', '', $rec->framedipaddress) : \Illuminate\Support\Facades\DB::raw('ip_address'),
+                'mac_address' => $rec->callingstationid,
+                'ip_address' => $ip,
             ]);
+    }
+})->everyMinute();
 
-        // Mark as processed
-        if ($updated) {
-            \Illuminate\Support\Facades\DB::table('radacct')
-                ->where('radacctid', $rec->radacctid)
-                ->update(['acctsessiontime' => 1]);
+// Hapus duplikat session: hanya keep 1 disconnected + 1 active per user per router
+Schedule::call(function () {
+    $users = \Illuminate\Support\Facades\DB::table('user_sessions')
+        ->select(\Illuminate\Support\Facades\DB::raw('DISTINCT user_id, router_id'))
+        ->where('status', 'disconnected')
+        ->get();
+    
+    foreach ($users as $u) {
+        $latest = \App\Models\UserSession::where('user_id', $u->user_id)
+            ->where('router_id', $u->router_id)
+            ->where('status', 'disconnected')
+            ->orderByDesc('login_at')
+            ->first();
+        
+        if ($latest) {
+            \App\Models\UserSession::where('user_id', $u->user_id)
+                ->where('router_id', $u->router_id)
+                ->where('status', 'disconnected')
+                ->where('id', '!=', $latest->id)
+                ->update(['status' => 'expired']);
         }
     }
 })->everyFiveMinutes();
