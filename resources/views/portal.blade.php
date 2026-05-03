@@ -308,6 +308,19 @@
         var showWaForm = false, showRoomForm = false, showWaVerify = false;
         var waPhone = "", roomNumber = "", loading = false;
         var fingerprint = "", trustScore = 50;
+        
+        // Generate simple fingerprint from browser data
+        function generateFingerprint() {
+            var ua = navigator.userAgent || "";
+            var scr = screen.width + "x" + screen.height + "x" + screen.colorDepth;
+            var tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+            var cores = navigator.hardwareConcurrency || "";
+            var raw = ua + scr + tz + cores;
+            var h = 0;
+            for (var i = 0; i < raw.length; i++) { var c = raw.charCodeAt(i); h = ((h << 5) - h) + c; h = h & h; }
+            fingerprint = "fp-br-" + Math.abs(h).toString(16);
+        }
+        generateFingerprint();
         var linkLogin = "", dstUrl = "https://www.google.com";
         var otpDigits = ["", "", "", "", "", ""];
 

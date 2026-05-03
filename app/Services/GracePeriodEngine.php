@@ -41,8 +41,6 @@ class GracePeriodEngine
         $ip = $request->ip();
         $nasId = $router->nas_identifier;
 
-        $config = $router->tenant->portalConfig;
-
         $sessions = UserSession::where('status', 'disconnected')
             ->where('expires_at', '>', now())
             ->where('router_id', $router->id)
@@ -50,22 +48,28 @@ class GracePeriodEngine
             ->get();
 
         $hasValidMac = $mac && $mac !== 'unknown';
+        $hasFingerprint = !empty($fingerprint);
+        $hasCookie = !empty($cookie);
 
         foreach ($sessions as $session) {
             $score = 0;
 
+            // Fingerprint match = sinyal terkuat (device yang sama)
+            if ($hasFingerprint && $session->fingerprint_hash === $fingerprint) {
+                $score += 5;
+            }
+
+            // Cookie match = session yang sama
+            if ($hasCookie && $session->cookie_token === $cookie) {
+                $score += 5;
+            }
+
+            // MAC match (tidak wajib, karena random MAC)
             if ($hasValidMac && $session->mac_address === $mac) {
-                $score += 4;
+                $score += 2;
             }
 
-            if ($cookie && $session->cookie_token === $cookie) {
-                $score += 4;
-            }
-
-            if ($fingerprint && $session->fingerprint_hash === $fingerprint) {
-                $score += 3;
-            }
-
+            // IP match
             if ($ip && $session->ip_address === $ip) {
                 $score += 2;
             }
@@ -75,8 +79,8 @@ class GracePeriodEngine
                 $score += 1;
             }
 
-            // Fallback: jika MAC tidak diketahui, cocokkan berdasarkan username yang sama di router yang sama
-            if (!$hasValidMac && $cookie) {
+            // Fallback: jika tidak ada MAC valid, cocokkan cookie ke user yang sama
+            if (!$hasValidMac && $hasCookie) {
                 $cookieSession = UserSession::where('cookie_token', $cookie)
                     ->where('router_id', $router->id)
                     ->first();
@@ -85,13 +89,12 @@ class GracePeriodEngine
                 }
             }
 
-            // Threshold: MAC known=3, MAC unknown=2, fingerprint present=2
+            // Threshold: fingerprint atau cookie cukup untuk auto-login
             $threshold = 3;
-            if (!$hasValidMac) {
+            if ($hasFingerprint || $hasCookie) {
+                $threshold = 1;
+            } elseif (!$hasValidMac) {
                 $threshold = 2;
-            }
-            if ($fingerprint) {
-                $threshold = min($threshold, 2);
             }
 
             if ($score >= $threshold) {
