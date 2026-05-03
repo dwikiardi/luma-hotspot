@@ -1,7 +1,7 @@
 FROM php:8.2-fpm
 
 RUN apt-get update && apt-get install -y \
-    git curl libpng-dev libonig-dev libxml2-dev zip unzip libpq-dev libzip-dev libicu-dev \
+    git curl libpng-dev libonig-dev libxml2-dev zip unzip libpq-dev libzip-dev libicu-dev supervisor \
     && docker-php-ext-install pdo pdo_pgsql mbstring exif pcntl bcmath gd zip intl bcmath
 
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
@@ -13,6 +13,12 @@ COPY . .
 RUN rm -rf bootstrap/cache/*.php \
     && composer install --no-dev --optimize-autoloader --ignore-platform-reqs
 
+RUN mkdir -p /var/log/supervisor /var/run/supervisor
+
+COPY docker/supervisord.conf /etc/supervisor/supervisord.conf
+COPY docker/scheduler.conf /etc/supervisor/conf.d/scheduler.conf
+COPY docker/php-fpm.conf /etc/supervisor/conf.d/php-fpm.conf
+
 EXPOSE 9000
 
-CMD ["php-fpm"]
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/supervisord.conf"]
