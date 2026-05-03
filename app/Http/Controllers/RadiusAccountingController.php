@@ -132,10 +132,21 @@ class RadiusAccountingController extends Controller
                 'ip_address' => $framedIp ?: ($nasIp ?: $session->ip_address),
             ]);
         } else {
-            UserSession::where('user_id', $user->id)
+            // Cari session yang match dengan MAC + router (bukan user_id)
+            $existingByMac = UserSession::where('mac_address', $mac)
                 ->where('router_id', $router->id)
                 ->where('status', 'active')
-                ->update(['status' => 'disconnected', 'disconnected_at' => now()]);
+                ->first();
+
+            if ($existingByMac) {
+                $existingByMac->update([
+                    'last_seen_at' => now(),
+                    'expires_at' => now()->addSeconds($sessionTimeout),
+                    'user_id' => $user->id,
+                    'ip_address' => $framedIp ?: ($nasIp ?: $existingByMac->ip_address),
+                ]);
+                return;
+            }
 
             $device = $user->devices()->first();
             if (! $device) {
@@ -229,10 +240,11 @@ class RadiusAccountingController extends Controller
         $query = UserSession::where('router_id', $router->id)
             ->where('status', 'active');
 
-        if ($user) {
-            $query->where('user_id', $user->id);
-        } elseif ($mac) {
+        // Prioritaskan MAC match untuk multi-device support
+        if ($mac) {
             $query->where('mac_address', $mac);
+        } elseif ($user) {
+            $query->where('user_id', $user->id);
         }
 
         $session = $query->orderByDesc('login_at')->first();

@@ -41,7 +41,7 @@ Schedule::call(function () {
         ->update(['status' => 'disconnected', 'disconnected_at' => now()]);
 })->everyMinute();
 
-// Sync radacct to user_sessions: update MAC/IP untuk semua session aktif/baru
+// Sync radacct to user_sessions: update MAC/IP untuk session yang match MAC
 Schedule::call(function () {
     $records = \Illuminate\Support\Facades\DB::table('radacct')
         ->whereNotNull('callingstationid')
@@ -53,17 +53,10 @@ Schedule::call(function () {
         ->get();
 
     foreach ($records as $rec) {
-        $userId = \Illuminate\Support\Facades\DB::table('users')
-            ->where('identity_value', $rec->username)
-            ->value('id');
-
-        if (! $userId) {
-            continue;
-        }
-
         $ip = preg_replace('/\/\d+$/', '', $rec->framedipaddress);
 
-        \App\Models\UserSession::where('user_id', $userId)
+        // Update session yang match dengan MAC ini
+        \App\Models\UserSession::where('mac_address', $rec->callingstationid)
             ->whereIn('status', ['active', 'disconnected'])
             ->update([
                 'mac_address' => $rec->callingstationid,
