@@ -3,94 +3,96 @@
 namespace App\Services;
 
 use App\Models\Router;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class MikroTikApiService
 {
-    protected ?string $ip;
-    protected ?string $username;
-    protected ?string $password;
+    protected string $jumpHost;
+    protected string $sshUser = 'admin';
+    protected int $sshPort = 22;
 
-    public function __construct(?string $ip = null, ?string $username = null, ?string $password = null)
+    public function __construct()
     {
-        $this->ip = $ip;
-        $this->username = $username;
-        $this->password = $password;
+        $this->jumpHost = config('services.mikrotik.jump_host', 'support@103.137.141.8');
     }
 
-    public static function forRouter(Router $router): self
+    /**
+     * Disconnect user aktif dari MikroTik hotspot
+     */
+    public function disconnectUser(string $username, Router $router): void
     {
-        return new self(
-            $router->ip_address,
-            config("services.mikrotik.username", "admin"),
-            config("services.mikrotik.password", "")
-        );
-    }
+        $mikrotikIp = $router->nas_ip ?? $router->hotspot_address ?? '10.0.70.4';
 
-    public function connect(): bool
-    {
-        if (! $this->ip || ! $this->username) {
-            return false;
+        $commands = [
+            "/ip hotspot active remove [find where user='{$username}']",
+            "/ip hotspot user remove [find where name='{$username}']",
+        ];
+
+        foreach ($commands as $cmd) {
+            $this->runSsh($mikrotikIp, $cmd);
         }
-
-        try {
-            $response = Http::withBasicAuth($this->username, $this->password)
-                ->withoutVerifying()
-                ->get("https://{$this->ip}/rest/login");
-
-            return $response->successful();
-        } catch (\Exception $e) {
-            Log::error("MikroTik connection failed: " . $e->getMessage());
-        }
-
-        return false;
     }
 
-    public function isOnline(): bool
+    /**
+     * Hapus semua session user tertentu
+     */
+    public function removeUser(string $username, Router $router): void
     {
-        return $this->connect();
+        $mikrotikIp = $router->nas_ip ?? $router->hotspot_address ?? '10.0.70.4';
+
+        $cmd = "/ip hotspot user remove [find where name='{$username}']";
+        $this->runSsh($mikrotikIp, $cmd);
     }
 
-    public function getActiveHotspotUsers(): array
+    /**
+     * Dapatkan daftar user aktif
+     */
+    public function getActiveUsers(Router $router): array
     {
-        if (! $this->connect()) {
-            return [];
-        }
+        $mikrotikIp = $router->nas_ip ?? $router->hotspot_address ?? '10.0.70.4';
+        $output = $this->runSsh($mikrotikIp, "/ip hotspot active print without-paging");
 
-        try {
-            $response = Http::withBasicAuth($this->username, $this->password)
-                ->withoutVerifying()
-                ->get("https://{$this->ip}/rest/ip/hotspot/active");
-
-            if ($response->successful()) {
-                return $response->json();
+        $users = [];
+        foreach (explode("\n", $output) as $line) {
+            if (preg_match('/(\d+)\s+([^\s]+)\s+(\d+\.\d+\.\d+\.\d+)/', $line, $m)) {
+                $users[] = [
+                    'user' => $m[2],
+                    'address' => $m[3],
+                    'uptime' => $m[1],
+                ];
             }
-        } catch (\Exception $e) {
-            Log::error("MikroTik get active users failed: " . $e->getMessage());
         }
 
-        return [];
+        return $users;
     }
 
-    public function getResource(): array
+    /**
+     * Eksekusi SSH ke MikroTik melalui jump host
+     */
+    protected function runSsh(string $host, string $command): string
     {
-        if (! $this->connect()) {
-            return [];
+        $escapedCmd = escapeshellarg($command);
+        $jump = escapeshellarg($this->jumpHost);
+        $user = escapeshellarg($this->sshUser);
+
+        // SSH via jump host: container → Server B → MikroTik
+        $sshCmd = "ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -J {$jump} {$user}@{$host} {$escapedCmd} 2>&1";
+
+        $output = [];
+        $exitCode = 0;
+        exec($sshCmd, $output, $exitCode);
+
+        $result = implode("\n", $output);
+
+        if ($exitCode !== 0) {
+            Log::warning('MikroTik SSH command failed', [
+                'host' => $host,
+                'command' => $command,
+                'exit_code' => $exitCode,
+                'output' => $result,
+            ]);
         }
 
-        try {
-            $response = Http::withBasicAuth($this->username, $this->password)
-                ->withoutVerifying()
-                ->get("https://{$this->ip}/rest/system/resource");
-
-            if ($response->successful()) {
-                return $response->json();
-            }
-        } catch (\Exception $e) {
-            Log::error("MikroTik get resource failed: " . $e->getMessage());
-        }
-
-        return [];
+        return $result;
     }
 }
