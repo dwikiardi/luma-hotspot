@@ -92,8 +92,9 @@ class MikroTikApiService
         $hostEscaped = escapeshellarg($host);
         $jumpHost = escapeshellarg($this->jumpHost);
 
-        $sshCmd = "ssh -o StrictHostKeyChecking=no -o ConnectTimeout=15 {$jumpHost} "
-            . "'docker exec openvpn sshpass -p \"\" ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 "
+        $sshCmd = "ssh -i /var/www/.ssh/id_ed25519 -o UserKnownHostsFile=/dev/null "
+            . "-o StrictHostKeyChecking=no -o ConnectTimeout=10 {$jumpHost} "
+            . "'docker exec openvpn sshpass -p \"\" ssh -o StrictHostKeyChecking=no -o ConnectTimeout=8 "
             . "{$this->sshUser}@{$hostEscaped} {$escapedCmd}' 2>&1";
 
         $output = [];
