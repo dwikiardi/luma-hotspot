@@ -128,3 +128,58 @@ Schedule::call(function () {
             ]);
     }
 })->everyMinute();
+
+// Sync MikroTik active → create missing DB sessions
+Schedule::call(function () {
+    try {
+        $service = app(\App\Services\MikroTikApiService::class);
+        $routers = \App\Models\Router::where('is_active', true)->get();
+
+        foreach ($routers as $router) {
+            $users = $service->getActiveUsers($router);
+            foreach ($users as $u) {
+                $identity = $u['user'];
+                $ip = $u['address'] ?? '0.0.0.0';
+
+                $user = \App\Models\User::where('identity_value', $identity)->first();
+                if (! $user) continue;
+
+                // Skip if already active in DB
+                $exists = \App\Models\UserSession::where('user_id', $user->id)
+                    ->where('status', 'active')
+                    ->exists();
+                if ($exists) continue;
+
+                // Get MAC from radacct
+                $rad = \Illuminate\Support\Facades\DB::table('radacct')
+                    ->where('username', $identity)
+                    ->orderByDesc('radacctid')
+                    ->first();
+                $mac = $rad?->callingstationid ?? 'unknown';
+
+                $device = \App\Models\Device::firstOrCreate(
+                    ['fingerprint_hash' => 'fp-mk-'.substr(md5($mac), 0, 12)],
+                    ['user_id' => $user->id]
+                );
+
+                \App\Models\UserSession::create([
+                    'user_id' => $user->id,
+                    'device_id' => $device->id,
+                    'router_id' => $router->id,
+                    'mac_address' => $mac,
+                    'ip_address' => $ip,
+                    'login_at' => now(),
+                    'last_seen_at' => now(),
+                    'expires_at' => now()->addHours(4),
+                    'status' => 'active',
+                    'nas_id' => $router->nas_identifier,
+                    'login_method' => 'room',
+                    'cookie_token' => \App\Models\UserSession::generateCookieToken(),
+                    'fingerprint_hash' => 'fp-mk-'.substr(md5($mac), 0, 12),
+                ]);
+            }
+        }
+    } catch (\Throwable $e) {
+        \Illuminate\Support\Facades\Log::warning('MikroTik sync failed', ['error' => $e->getMessage()]);
+    }
+})->everyMinute();
