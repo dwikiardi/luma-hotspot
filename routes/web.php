@@ -49,4 +49,19 @@ Route::get('/impersonate/{userId}', function (int $userId) {
     return redirect()->to("/dashboard/venue/{$slug}");
 })->name('impersonate');
 
-Route::get('/', fn () => redirect('/portal'));
+Route::post('/tenant/mikrotik/disconnect', function (\Illuminate\Http\Request $request) {
+    $nasId = $request->input('nas_id');
+    $username = $request->input('username');
+
+    $router = \App\Models\Router::where('nas_identifier', $nasId)->first();
+    if (! $router) {
+        return response()->json(['success' => false, 'message' => 'Router not found'], 404);
+    }
+
+    try {
+        app(\App\Services\MikroTikApiService::class)->disconnectUser($username, $router);
+        return response()->json(['success' => true, 'message' => "User $username disconnected"]);
+    } catch (\Throwable $e) {
+        return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+    }
+})->middleware('web');

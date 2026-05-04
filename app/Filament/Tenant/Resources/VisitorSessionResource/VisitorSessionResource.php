@@ -132,6 +132,26 @@ class VisitorSessionResource extends Resource
             ->defaultSort("login_at", "desc")
             ->paginated([15, 25, 50])
             ->actions([
+                Tables\Actions\Action::make('disconnect')
+                    ->label('Putuskan')
+                    ->icon('heroicon-o-x-circle')
+                    ->color('danger')
+                    ->visible(fn ($record) => $record->status === 'active')
+                    ->action(function ($record) {
+                        $username = $record->user?->identity_value;
+                        $router = $record->router;
+                        if ($username && $router) {
+                            app(\App\Services\MikroTikApiService::class)->disconnectUser($username, $router);
+                            $record->update(['status' => 'disconnected', 'disconnected_at' => now()]);
+                            \Filament\Notifications\Notification::make()
+                                ->success()
+                                ->title("User $username diputuskan dari hotspot")
+                                ->send();
+                        }
+                    })
+                    ->requiresConfirmation()
+                    ->modalHeading('Putuskan user ini?')
+                    ->modalDescription('User akan diputuskan dari hotspot MikroTik.'),
                 Tables\Actions\DeleteAction::make()
                     ->label('Hapus')
                     ->modalHeading('Hapus sesi ini?')

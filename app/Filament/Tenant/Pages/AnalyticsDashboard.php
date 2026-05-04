@@ -5,6 +5,7 @@ namespace App\Filament\Tenant\Pages;
 use App\Filament\Tenant\Widgets\ActiveSessionsWidget;
 use App\Filament\Tenant\Widgets\GracePeriodStatsWidget;
 use App\Filament\Tenant\Widgets\LoginMethodChartWidget;
+use App\Filament\Tenant\Widgets\MikroTikHotspotWidget;
 use App\Filament\Tenant\Widgets\PeakHourChartWidget;
 use App\Filament\Tenant\Widgets\StatsOverviewWidget;
 use Filament\Pages\Dashboard as BaseDashboard;
@@ -24,6 +25,7 @@ class AnalyticsDashboard extends BaseDashboard
     public function getWidgets(): array
     {
         return [
+            MikroTikHotspotWidget::class,
             ActiveSessionsWidget::class,
         ];
     }
