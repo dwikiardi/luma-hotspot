@@ -8,7 +8,6 @@ use Illuminate\Support\Facades\Log;
 class MikroTikApiService
 {
     protected string $jumpHost;
-    protected string $sshUser = 'admin';
 
     public function __construct()
     {
@@ -18,84 +17,107 @@ class MikroTikApiService
     public function disconnectUser(string $username, Router $router): void
     {
         $mikrotikIp = $this->getMikroTikIp($router);
+        $escapedUsername = escapeshellarg($username);
+        $escapedIp = escapeshellarg($mikrotikIp);
+        $jumpHost = escapeshellarg($this->jumpHost);
 
-        $commands = [
-            "/ip hotspot active remove [find where user='{$username}']",
-        ];
+        $script = <<<PYEOF
+from routeros_api import RouterOsApiPool
+pool = RouterOsApiPool({$escapedIp}, username="admin", password="", plaintext_login=True, use_ssl=False)
+api = pool.get_api()
+active = api.get_resource("/ip/hotspot/active")
+for e in active.get():
+    if e.get("user") == {$escapedUsername}:
+        active.call("remove", {{".id": e[".id"]}})
+pool.disconnect()
+print("done")
+PYEOF;
 
-        foreach ($commands as $cmd) {
-            $this->runSsh($mikrotikIp, $cmd);
-        }
-    }
-
-    public function removeUser(string $username, Router $router): void
-    {
-        $mikrotikIp = $this->getMikroTikIp($router);
-        $this->runSsh($mikrotikIp, "/ip hotspot user remove [find where name='{$username}']");
+        $this->execPython($script);
     }
 
     public function getActiveUsers(Router $router): array
     {
         $mikrotikIp = $this->getMikroTikIp($router);
-        $output = $this->runSsh($mikrotikIp, "/ip hotspot active print without-paging");
+        $escapedIp = escapeshellarg($mikrotikIp);
+        $jumpHost = escapeshellarg($this->jumpHost);
 
+        $script = <<<PYEOF
+from routeros_api import RouterOsApiPool
+pool = RouterOsApiPool({$escapedIp}, username="admin", password="", plaintext_login=True, use_ssl=False)
+api = pool.get_api()
+active = api.get_resource("/ip/hotspot/active")
+for e in active.get():
+    print(f"=user={{e.get('user','')}}=address={{e.get('address','')}}")
+pool.disconnect()
+PYEOF;
+
+        $output = $this->execPython($script);
         $users = [];
         foreach (explode("\n", $output) as $line) {
-            if (preg_match('/\d+\s+(\S+)\s+(\d+\.\d+\.\d+\.\d+)/', $line, $m)) {
-                $users[] = [
-                    'user' => $m[1],
-                    'address' => $m[2],
-                ];
+            if (preg_match('/=user=(\S+)=address=(\S+)/', $line, $m)) {
+                $users[] = ['user' => $m[1], 'address' => $m[2]];
             }
         }
-
         return $users;
     }
 
-    /**
-     * Push konfigurasi hotspot ke MikroTik
-     */
     public function setHotspotConfig(Router $router, int $sessionTimeout, int $idleTimeout, int $sharedUsers): void
     {
         $mikrotikIp = $this->getMikroTikIp($router);
+        $escapedIp = escapeshellarg($mikrotikIp);
+        $jumpHost = escapeshellarg($this->jumpHost);
 
-        // Hanya push shared-users ke MikroTik
-        // Session/Idle timeout diatur via FreeRADIUS (radreply)
-        $this->runSsh($mikrotikIp, "/ip hotspot profile set [find] shared-users={$sharedUsers}");
+        $script = <<<PYEOF
+from routeros_api import RouterOsApiPool
+pool = RouterOsApiPool({$escapedIp}, username="admin", password="", plaintext_login=True, use_ssl=False)
+api = pool.get_api()
+up = api.get_resource("/ip/hotspot/user/profile")
+for p in up.get():
+    up.call("set", {{"shared-users": "{$sharedUsers}", ".id": p[".id"]}})
+pool.disconnect()
+print("done")
+PYEOF;
+
+        $this->execPython($script);
     }
 
-    /**
-     * Ping MikroTik untuk cek koneksi
-     */
     public function isReachable(Router $router): bool
     {
         $mikrotikIp = $this->getMikroTikIp($router);
-        $output = $this->runSsh($mikrotikIp, ":put connected");
-        return str_contains($output, 'connected');
+        $escapedIp = escapeshellarg($mikrotikIp);
+        $jumpHost = escapeshellarg($this->jumpHost);
+
+        $script = <<<PYEOF
+from routeros_api import RouterOsApiPool
+pool = RouterOsApiPool({$escapedIp}, username="admin", password="", plaintext_login=True, use_ssl=False)
+api = pool.get_api()
+res = api.get_resource("/system/resource")
+for r in res.get():
+    print(r.get("version",""))
+pool.disconnect()
+PYEOF;
+
+        $output = $this->execPython($script);
+        return !empty(trim($output));
     }
 
-    /**
-     * Dapatkan IP MikroTik dari tabel nas FreeRADIUS
-     */
     protected function getMikroTikIp(Router $router): string
     {
         $nasIp = \Illuminate\Support\Facades\DB::table('nas')
             ->where('shortname', $router->nas_identifier)
             ->value('nasname');
-
         return $nasIp ?: ($router->hotspot_address ?: '10.0.70.4');
     }
 
-    protected function runSsh(string $host, string $command): string
+    protected function execPython(string $script): string
     {
-        $escapedCmd = escapeshellarg($command);
-        $hostEscaped = escapeshellarg($host);
         $jumpHost = escapeshellarg($this->jumpHost);
+        $encoded = base64_encode($script);
 
         $sshCmd = "ssh -i /var/www/.ssh/id_ed25519 -o UserKnownHostsFile=/dev/null "
             . "-o StrictHostKeyChecking=no -o ConnectTimeout=10 {$jumpHost} "
-            . "'docker exec openvpn sshpass -p \"\" ssh -o StrictHostKeyChecking=no -o ConnectTimeout=8 "
-            . "{$this->sshUser}@{$hostEscaped} {$escapedCmd}' 2>&1";
+            . "'docker exec openvpn python3 -c \"import base64; exec(base64.b64decode(\\\"{$encoded}\\\"))\"' 2>&1";
 
         $output = [];
         $exitCode = 0;
@@ -104,9 +126,7 @@ class MikroTikApiService
         $result = implode("\n", $output);
 
         if ($exitCode !== 0) {
-            Log::warning('MikroTik command failed', [
-                'host' => $host,
-                'command' => $command,
+            Log::warning('MikroTik API failed', [
                 'exit_code' => $exitCode,
                 'output' => $result,
             ]);
