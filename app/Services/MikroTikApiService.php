@@ -9,16 +9,12 @@ class MikroTikApiService
 {
     protected string $jumpHost;
     protected string $sshUser = 'admin';
-    protected int $sshPort = 22;
 
     public function __construct()
     {
-        $this->jumpHost = config('services.mikrotik.jump_host', 'support@103.137.141.8');
+        $this->jumpHost = config('mikrotik.jump_host', 'support@103.137.141.8');
     }
 
-    /**
-     * Disconnect user aktif dari MikroTik hotspot
-     */
     public function disconnectUser(string $username, Router $router): void
     {
         $mikrotikIp = $router->nas_ip ?? $router->hotspot_address ?? '10.0.70.4';
@@ -33,20 +29,12 @@ class MikroTikApiService
         }
     }
 
-    /**
-     * Hapus semua session user tertentu
-     */
     public function removeUser(string $username, Router $router): void
     {
         $mikrotikIp = $router->nas_ip ?? $router->hotspot_address ?? '10.0.70.4';
-
-        $cmd = "/ip hotspot user remove [find where name='{$username}']";
-        $this->runSsh($mikrotikIp, $cmd);
+        $this->runSsh($mikrotikIp, "/ip hotspot user remove [find where name='{$username}']");
     }
 
-    /**
-     * Dapatkan daftar user aktif
-     */
     public function getActiveUsers(Router $router): array
     {
         $mikrotikIp = $router->nas_ip ?? $router->hotspot_address ?? '10.0.70.4';
@@ -54,11 +42,10 @@ class MikroTikApiService
 
         $users = [];
         foreach (explode("\n", $output) as $line) {
-            if (preg_match('/(\d+)\s+([^\s]+)\s+(\d+\.\d+\.\d+\.\d+)/', $line, $m)) {
+            if (preg_match('/\d+\s+(\S+)\s+(\d+\.\d+\.\d+\.\d+)/', $line, $m)) {
                 $users[] = [
-                    'user' => $m[2],
-                    'address' => $m[3],
-                    'uptime' => $m[1],
+                    'user' => $m[1],
+                    'address' => $m[2],
                 ];
             }
         }
@@ -66,17 +53,21 @@ class MikroTikApiService
         return $users;
     }
 
-    /**
-     * Eksekusi SSH ke MikroTik melalui jump host
-     */
     protected function runSsh(string $host, string $command): string
     {
+        // Eksekusi SSH via Server B → Docker container → MikroTik
         $escapedCmd = escapeshellarg($command);
-        $jump = escapeshellarg($this->jumpHost);
-        $user = escapeshellarg($this->sshUser);
+        $hostEscaped = escapeshellarg($host);
 
-        // SSH via jump host: container → Server B → MikroTik
-        $sshCmd = "ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -J {$jump} {$user}@{$host} {$escapedCmd} 2>&1";
+        $sshCmd = sprintf(
+            'ssh -o StrictHostKeyChecking=no -o ConnectTimeout=15 %s '
+            . 'sg docker -c "docker exec openvpn sshpass -p \'\' ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 '
+            . '%s@%s %s" 2>&1',
+            escapeshellarg($this->jumpHost),
+            escapeshellarg($this->sshUser),
+            $hostEscaped,
+            $escapedCmd
+        );
 
         $output = [];
         $exitCode = 0;
@@ -85,7 +76,7 @@ class MikroTikApiService
         $result = implode("\n", $output);
 
         if ($exitCode !== 0) {
-            Log::warning('MikroTik SSH command failed', [
+            Log::warning('MikroTik command failed', [
                 'host' => $host,
                 'command' => $command,
                 'exit_code' => $exitCode,
