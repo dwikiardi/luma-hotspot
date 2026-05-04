@@ -34,9 +34,18 @@ class RadUserResource extends Resource
         $tenantId = filament()->getTenant()?->id;
         $routerIds = Router::where('tenant_id', $tenantId)->pluck('id')->toArray();
 
+        if (empty($routerIds)) {
+            return User::where('id', 0);
+        }
+
         return User::whereHas('sessions', function ($q) use ($routerIds) {
-            $q->whereIn('router_id', $routerIds);
-        })->orWhereHas('devices')->orderByDesc('id');
+                $q->whereIn('router_id', $routerIds);
+            })
+            ->orderByDesc('id')
+            ->withCount(['sessions as active_sessions_count' => function ($q) {
+                $q->where('status', 'active');
+            }])
+            ->withCount(['sessions as total_sessions_count']);
     }
 
     public static function table(Table $table): Table
@@ -76,17 +85,16 @@ class RadUserResource extends Resource
                     })
                     ->copyable()
                     ->fontFamily('mono'),
-                Tables\Columns\TextColumn::make('active_sessions')
+                Tables\Columns\TextColumn::make('active_sessions_count')
                     ->label('Online')
-                    ->formatStateUsing(fn ($record) => \App\Models\UserSession::where('user_id', $record->id)->where('status', 'active')->count())
                     ->badge(),
-                Tables\Columns\TextColumn::make('total_sessions')
-                    ->label('Total Login')
-                    ->formatStateUsing(fn ($record) => \App\Models\UserSession::where('user_id', $record->id)->count()),
+                Tables\Columns\TextColumn::make('total_sessions_count')
+                    ->label('Total Login'),
                 Tables\Columns\TextColumn::make('last_login')
                     ->label('Login Terakhir')
                     ->formatStateUsing(fn ($record) => \App\Models\UserSession::where('user_id', $record->id)->max('login_at'))
-                    ->dateTime('d M H:i'),
+                    ->dateTime('d M H:i')
+                    ->sortable(),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('identity_type')
