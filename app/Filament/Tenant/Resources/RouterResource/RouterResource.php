@@ -207,7 +207,27 @@ class RouterResource extends Resource
                     'v7' => 'success', 'v6' => 'warning', default => 'gray',
                 }),
                 Tables\Columns\TextColumn::make('location')->label('Lokasi')->placeholder('-'),
-                Tables\Columns\IconColumn::make('is_active')->label('Status')->boolean(),
+                Tables\Columns\TextColumn::make('is_online')
+                    ->label('Status')
+                    ->badge()
+                    ->color(fn (string $state): string => match ($state) {
+                        'online' => 'success',
+                        'offline' => 'danger',
+                        default => 'gray',
+                    })
+                    ->formatStateUsing(fn (string $state): string => match ($state) {
+                        'online' => 'Online',
+                        'offline' => 'Offline',
+                        default => 'Unknown',
+                    })
+                    ->state(function (Router $record): string {
+                        try {
+                            $service = app(\App\Services\MikroTikApiService::class);
+                            return $service->isReachable($record) ? 'online' : 'offline';
+                        } catch (\Throwable) {
+                            return 'offline';
+                        }
+                    }),
                 Tables\Columns\TextColumn::make('created_at')->label('Dibuat')->date()->sortable(),
             ])
             ->filters([Tables\Filters\TernaryFilter::make('is_active')->label('Status')])

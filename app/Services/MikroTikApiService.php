@@ -17,7 +17,7 @@ class MikroTikApiService
 
     public function disconnectUser(string $username, Router $router): void
     {
-        $mikrotikIp = $router->nas_ip ?? $router->hotspot_address ?? '10.0.70.4';
+        $mikrotikIp = $this->getMikroTikIp($router);
 
         $commands = [
             "/ip hotspot active remove [find where user='{$username}']",
@@ -30,13 +30,13 @@ class MikroTikApiService
 
     public function removeUser(string $username, Router $router): void
     {
-        $mikrotikIp = $router->nas_ip ?? $router->hotspot_address ?? '10.0.70.4';
+        $mikrotikIp = $this->getMikroTikIp($router);
         $this->runSsh($mikrotikIp, "/ip hotspot user remove [find where name='{$username}']");
     }
 
     public function getActiveUsers(Router $router): array
     {
-        $mikrotikIp = $router->nas_ip ?? $router->hotspot_address ?? '10.0.70.4';
+        $mikrotikIp = $this->getMikroTikIp($router);
         $output = $this->runSsh($mikrotikIp, "/ip hotspot active print without-paging");
 
         $users = [];
@@ -52,21 +52,49 @@ class MikroTikApiService
         return $users;
     }
 
+    /**
+     * Push konfigurasi hotspot ke MikroTik
+     */
+    public function setHotspotConfig(Router $router, int $sessionTimeout, int $idleTimeout, int $sharedUsers): void
+    {
+        $mikrotikIp = $this->getMikroTikIp($router);
+
+        $this->runSsh($mikrotikIp, "/ip hotspot profile set [find] session-timeout={$sessionTimeout}");
+        $this->runSsh($mikrotikIp, "/ip hotspot profile set [find] idle-timeout={$idleTimeout}");
+        $this->runSsh($mikrotikIp, "/ip hotspot profile set [find] shared-users={$sharedUsers}");
+    }
+
+    /**
+     * Ping MikroTik untuk cek koneksi
+     */
+    public function isReachable(Router $router): bool
+    {
+        $mikrotikIp = $this->getMikroTikIp($router);
+        $output = $this->runSsh($mikrotikIp, ":put connected");
+        return str_contains($output, 'connected');
+    }
+
+    /**
+     * Dapatkan IP MikroTik dari tabel nas FreeRADIUS
+     */
+    protected function getMikroTikIp(Router $router): string
+    {
+        $nasIp = \Illuminate\Support\Facades\DB::table('nas')
+            ->where('shortname', $router->nas_identifier)
+            ->value('nasname');
+
+        return $nasIp ?: ($router->hotspot_address ?: '10.0.70.4');
+    }
+
     protected function runSsh(string $host, string $command): string
     {
-        // Eksekusi SSH via Server B → Docker container → MikroTik
         $escapedCmd = escapeshellarg($command);
         $hostEscaped = escapeshellarg($host);
+        $jumpHost = escapeshellarg($this->jumpHost);
 
-        $sshCmd = sprintf(
-            'ssh -o StrictHostKeyChecking=no -o ConnectTimeout=15 %s '
-            . 'sg docker -c "docker exec openvpn sshpass -p \'\' ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 '
-            . '%s@%s %s" 2>&1',
-            escapeshellarg($this->jumpHost),
-            escapeshellarg($this->sshUser),
-            $hostEscaped,
-            $escapedCmd
-        );
+        $sshCmd = "ssh -o StrictHostKeyChecking=no -o ConnectTimeout=15 {$jumpHost} "
+            . "'docker exec openvpn sshpass -p \"\" ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 "
+            . "{$this->sshUser}@{$hostEscaped} {$escapedCmd}' 2>&1";
 
         $output = [];
         $exitCode = 0;

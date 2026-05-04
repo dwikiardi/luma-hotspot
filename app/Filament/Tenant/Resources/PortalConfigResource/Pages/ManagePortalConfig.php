@@ -175,40 +175,27 @@ class ManagePortalConfig extends Page implements HasForms
                             ->label('DNS Name untuk Portal')
                             ->default('portal.lumanetwork.id'),
                         
-                        Forms\Components\Select::make('session_timeout')
-                            ->label('Session Timeout')
-                            ->options([
-                                '1800' => '30 menit',
-                                '3600' => '1 jam',
-                                '7200' => '2 jam',
-                                '14400' => '4 jam',
-                                '28800' => '8 jam',
-                                '43200' => '12 jam',
-                                '86400' => '24 jam',
-                            ])
-                            ->default('14400'),
-                        
-                        Forms\Components\Select::make('idle_timeout')
-                            ->label('Idle Timeout')
-                            ->options([
-                                '300' => '5 menit',
-                                '600' => '10 menit',
-                                '900' => '15 menit',
-                                '1800' => '30 menit',
-                                '3600' => '1 jam',
-                            ])
-                            ->default('1800'),
-                        
-                        Forms\Components\Select::make('shared_users')
+                        Forms\Components\TextInput::make('session_timeout')
+                            ->label('Session Timeout (detik)')
+                            ->numeric()
+                            ->minValue(60)
+                            ->default(14400)
+                            ->helperText('Durasi maksimal 1 sesi dalam detik (14400 = 4 jam)'),
+
+                        Forms\Components\TextInput::make('idle_timeout')
+                            ->label('Idle Timeout (detik)')
+                            ->numeric()
+                            ->minValue(60)
+                            ->default(1800)
+                            ->helperText('Auto logout jika tidak ada aktivitas (1800 = 30 menit)'),
+
+                        Forms\Components\TextInput::make('shared_users')
                             ->label('Shared Users')
-                            ->options([
-                                '1' => '1 user',
-                                '2' => '2 users',
-                                '3' => '3 users',
-                                '5' => '5 users',
-                                '10' => '10 users',
-                            ])
-                            ->default('3'),
+                            ->numeric()
+                            ->minValue(1)
+                            ->maxValue(100)
+                            ->default(3)
+                            ->helperText('Jumlah device yang bisa login bersamaan'),
                     ])->collapsible(),
 
                 Forms\Components\Section::make('Grace Period')
@@ -216,20 +203,13 @@ class ManagePortalConfig extends Page implements HasForms
                         Forms\Components\Toggle::make('grace_period_enabled')
                             ->label('Aktifkan Grace Period')
                             ->default(true),
-                        Forms\Components\Select::make('grace_period_seconds')
-                            ->label('Durasi Grace Period')
-                            ->options([
-                                '900' => '15 menit',
-                                '1800' => '30 menit',
-                                '3600' => '1 jam',
-                                '7200' => '2 jam',
-                                '14400' => '4 jam',
-                                '28800' => '8 jam',
-                                '43200' => '12 jam',
-                                '86400' => '24 jam',
-                            ])
+                        Forms\Components\TextInput::make('grace_period_seconds')
+                            ->label('Durasi Grace Period (detik)')
+                            ->numeric()
+                            ->minValue(60)
                             ->required()
-                            ->default('7200'),
+                            ->default(7200)
+                            ->helperText('Semakin lama, semakin nyaman untuk tamu (7200 = 2 jam)'),
                     ]),
             ])
             ->statePath('data');
@@ -240,7 +220,22 @@ class ManagePortalConfig extends Page implements HasForms
         $config = $this->getConfig();
         $config->update($this->data);
 
-        Notification::make()->title("Berhasil!")->body("Konfigurasi portal berhasil disimpan.")->success()->send();
+        // Push session timeout ke semua router MikroTik tenant ini
+        $tenantId = auth('tenant_users')->user()->tenant_id;
+        $routers = \App\Models\Router::where('tenant_id', $tenantId)->get();
+        $timeout = $this->data['session_timeout'] ?? 14400;
+        $idleTimeout = $this->data['idle_timeout'] ?? 1800;
+        $sharedUsers = $this->data['shared_users'] ?? 3;
+
+        try {
+            $mkService = app(\App\Services\MikroTikApiService::class);
+            foreach ($routers as $router) {
+                $mkService->setHotspotConfig($router, $timeout, $idleTimeout, $sharedUsers);
+            }
+            Notification::make()->title("Berhasil!")->body("Konfigurasi portal berhasil disimpan dan dipush ke MikroTik.")->success()->send();
+        } catch (\Throwable $e) {
+            Notification::make()->title("Berhasil!")->body("Konfigurasi tersimpan di database. Push ke MikroTik gagal: " . $e->getMessage())->warning()->send();
+        }
     }
 
     protected function getFormActions(): array
