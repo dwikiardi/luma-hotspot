@@ -37,8 +37,8 @@ class ManagePortalConfig extends Page implements HasForms
             'hotspot_profile_name' => $config->hotspot_profile_name ?? 'luma-portal',
             'address_pool_name' => $config->address_pool_name ?? 'hotspot-pool',
             'dns_name' => $config->dns_name ?? 'portal.lumanetwork.id',
-            'session_timeout' => $config->session_timeout ?? 14400,
-            'idle_timeout' => $config->idle_timeout ?? 1800,
+            'session_timeout' => $config->session_timeout ?? 0,
+            'idle_timeout' => $config->idle_timeout ?? 0,
             'shared_users' => $config->shared_users ?? 3,
             'room_validation_enabled' => $config->room_validation_enabled ?? false,
             'room_validation_mode' => $config->room_validation_mode ?? 'range',
@@ -176,18 +176,18 @@ class ManagePortalConfig extends Page implements HasForms
                             ->default('portal.lumanetwork.id'),
                         
                         Forms\Components\TextInput::make('session_timeout')
-                            ->label('Session Timeout (detik)')
+                            ->label('Session Timeout (detik) - Opsional')
                             ->numeric()
-                            ->minValue(60)
-                            ->default(14400)
-                            ->helperText('Durasi maksimal 1 sesi dalam detik (14400 = 4 jam)'),
+                            ->nullable()
+                            ->default(0)
+                            ->helperText('0 = tanpa batas. Diatur via FreeRADIUS radreply (Session-Timeout).'),
 
                         Forms\Components\TextInput::make('idle_timeout')
-                            ->label('Idle Timeout (detik)')
+                            ->label('Idle Timeout (detik) - Opsional')
                             ->numeric()
-                            ->minValue(60)
-                            ->default(1800)
-                            ->helperText('Auto logout jika tidak ada aktivitas (1800 = 30 menit)'),
+                            ->nullable()
+                            ->default(0)
+                            ->helperText('0 = tanpa batas. Diatur via FreeRADIUS radreply (Idle-Timeout).'),
 
                         Forms\Components\TextInput::make('shared_users')
                             ->label('Shared Users')
@@ -220,21 +220,68 @@ class ManagePortalConfig extends Page implements HasForms
         $config = $this->getConfig();
         $config->update($this->data);
 
-        // Push session timeout ke semua router MikroTik tenant ini
         $tenantId = auth('tenant_users')->user()->tenant_id;
-        $routers = \App\Models\Router::where('tenant_id', $tenantId)->get();
-        $timeout = $this->data['session_timeout'] ?? 14400;
-        $idleTimeout = $this->data['idle_timeout'] ?? 1800;
+        $timeout = ($this->data['session_timeout'] ?? 0) ?: 0;
+        $idleTimeout = ($this->data['idle_timeout'] ?? 0) ?: 0;
         $sharedUsers = $this->data['shared_users'] ?? 3;
 
+        $errors = [];
+
+        // Push session/idle timeout ke FreeRADIUS radreply untuk setiap user di router tenant
+        if ($timeout > 0 || $idleTimeout > 0) {
+            try {
+                $routerIds = \App\Models\Router::where('tenant_id', $tenantId)->pluck('id');
+                $userIds = \Illuminate\Support\Facades\DB::table('user_sessions')
+                    ->whereIn('router_id', $routerIds)
+                    ->distinct('user_id')
+                    ->pluck('user_id');
+                $users = \App\Models\User::whereIn('id', $userIds)->get(['identity_value']);
+
+                foreach ($users as $user) {
+                    // Hapus reply lama
+                    \Illuminate\Support\Facades\DB::table('radreply')
+                        ->where('username', $user->identity_value)
+                        ->whereIn('attribute', ['Session-Timeout', 'Idle-Timeout'])
+                        ->delete();
+
+                    // Insert baru jika > 0
+                    if ($timeout > 0) {
+                        \Illuminate\Support\Facades\DB::table('radreply')->insert([
+                            'username' => $user->identity_value,
+                            'attribute' => 'Session-Timeout',
+                            'op' => ':=',
+                            'value' => (string) $timeout,
+                        ]);
+                    }
+                    if ($idleTimeout > 0) {
+                        \Illuminate\Support\Facades\DB::table('radreply')->insert([
+                            'username' => $user->identity_value,
+                            'attribute' => 'Idle-Timeout',
+                            'op' => ':=',
+                            'value' => (string) $idleTimeout,
+                        ]);
+                    }
+                }
+            } catch (\Throwable $e) {
+                $errors[] = 'RADIUS: ' . $e->getMessage();
+            }
+        }
+
+        // Push shared_users ke MikroTik
         try {
+            $routers = \App\Models\Router::where('tenant_id', $tenantId)->get();
             $mkService = app(\App\Services\MikroTikApiService::class);
             foreach ($routers as $router) {
-                $mkService->setHotspotConfig($router, $timeout, $idleTimeout, $sharedUsers);
+                $mkService->setHotspotConfig($router, (int) $timeout, (int) $idleTimeout, (int) $sharedUsers);
             }
-            Notification::make()->title("Berhasil!")->body("Konfigurasi portal berhasil disimpan dan dipush ke MikroTik.")->success()->send();
         } catch (\Throwable $e) {
-            Notification::make()->title("Berhasil!")->body("Konfigurasi tersimpan di database. Push ke MikroTik gagal: " . $e->getMessage())->warning()->send();
+            $errors[] = 'MikroTik: ' . $e->getMessage();
+        }
+
+        if (empty($errors)) {
+            Notification::make()->title("Berhasil!")->body("Konfigurasi disimpan. Timeout dipush ke FreeRADIUS, shared_users ke MikroTik.")->success()->send();
+        } else {
+            Notification::make()->title("Berhasil dengan catatan")->body("Tersimpan di database. " . implode(' | ', $errors))->warning()->send();
         }
     }
 

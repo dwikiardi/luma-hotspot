@@ -59,8 +59,8 @@ class MikroTikApiService
     {
         $mikrotikIp = $this->getMikroTikIp($router);
 
-        $this->runSsh($mikrotikIp, "/ip hotspot profile set [find] session-timeout={$sessionTimeout}");
-        $this->runSsh($mikrotikIp, "/ip hotspot profile set [find] idle-timeout={$idleTimeout}");
+        // Hanya push shared-users ke MikroTik
+        // Session/Idle timeout diatur via FreeRADIUS (radreply)
         $this->runSsh($mikrotikIp, "/ip hotspot profile set [find] shared-users={$sharedUsers}");
     }
 
