@@ -10,7 +10,7 @@ class ActiveSessionsWidget extends Widget
 {
     protected static string $view = 'filament.tenant.widgets.active-sessions';
 
-    protected static ?string $pollingInterval = '30s';
+    protected static ?string $pollingInterval = '10s';
 
     protected int|string|array $columnSpan = 'full';
 

@@ -12,7 +12,7 @@ class StatsOverviewWidget extends BaseWidget
 {
     protected int|string|array $columnSpan = 'full';
 
-    protected static ?string $pollingInterval = '30s';
+    protected static ?string $pollingInterval = '10s';
 
     protected function getStats(): array
     {
@@ -24,7 +24,7 @@ class StatsOverviewWidget extends BaseWidget
                 Stat::make('Online', 0)->icon('heroicon-o-users')->color('gray'),
                 Stat::make('Sesi Aktif', 0)->icon('heroicon-o-wifi')->color('gray'),
                 Stat::make('Login 7hr', 0)->icon('heroicon-o-check')->color('gray'),
-                Stat::make('Jam Sibuk', '-')->icon('heroicon-o-clock')->color('gray'),
+                Stat::make('Hotspot', 0)->icon('heroicon-o-signal')->color('gray'),
             ];
         }
 
@@ -33,9 +33,9 @@ class StatsOverviewWidget extends BaseWidget
         if (empty($routerIds)) {
             return [
                 Stat::make('Online', 0)->description('Belum ada router')->icon('heroicon-o-users')->color('gray'),
-                Stat::make('Sesi Aktif', 0)->description('-')->icon('heroicon-o-wifi')->color('gray'),
-                Stat::make('Login 7hr', 0)->description('-')->icon('heroicon-o-check')->color('gray'),
-                Stat::make('Jam Sibuk', '-')->description('-')->icon('heroicon-o-clock')->color('gray'),
+                Stat::make('Sesi Aktif', 0)->icon('heroicon-o-wifi')->color('gray'),
+                Stat::make('Login 7hr', 0)->icon('heroicon-o-check')->color('gray'),
+                Stat::make('Hotspot', 0)->icon('heroicon-o-signal')->color('gray'),
             ];
         }
 
@@ -53,35 +53,38 @@ class StatsOverviewWidget extends BaseWidget
             ->where('login_at', '>=', $sevenDaysAgo)
             ->count();
 
-        $peakHour = UserSession::whereIn('router_id', $routerIds)
-            ->where('login_at', '>=', $sevenDaysAgo)
-            ->selectRaw('EXTRACT(HOUR FROM login_at) as hour, COUNT(*) as cnt')
-            ->groupBy('hour')
-            ->orderByDesc('cnt')
-            ->first();
-
         $graceCount = UserSession::whereIn('router_id', $routerIds)
             ->where('status', 'disconnected')
             ->where('expires_at', '>', now())
             ->count();
 
+        // Real-time MikroTik hotspot count
+        $mikrotikOnline = 0;
+        try {
+            $mkService = app(\App\Services\MikroTikApiService::class);
+            $routers = Router::where('tenant_id', $tenantId)->get();
+            foreach ($routers as $router) {
+                $mikrotikOnline += count($mkService->getActiveUsers($router));
+            }
+        } catch (\Throwable) {}
+
         return [
             Stat::make('Online', $uniqueOnline)
-                ->description($activeSessions.' sesi aktif')
+                ->description($activeSessions.' sesi, '.$graceCount.' grace')
                 ->icon('heroicon-o-users')
                 ->color($uniqueOnline > 0 ? 'primary' : 'gray'),
-            Stat::make('Sesi Aktif', $activeSessions)
-                ->description($graceCount.' dalam grace period')
-                ->icon('heroicon-o-wifi')
-                ->color($activeSessions > 0 ? 'success' : 'gray'),
+            Stat::make('Hotspot MikroTik', $mikrotikOnline)
+                ->description('langsung dari router')
+                ->icon('heroicon-o-signal')
+                ->color($mikrotikOnline > 0 ? 'success' : 'warning'),
             Stat::make('Login 7hr', $loginCount)
                 ->description('7 hari terakhir')
                 ->icon('heroicon-o-check-circle')
                 ->color('success'),
-            Stat::make('Jam Sibuk', ($peakHour?->hour ?? '-').':00')
-                ->description('jam terbanyak pengunjung')
-                ->icon('heroicon-o-clock')
-                ->color('warning'),
+            Stat::make('Sesi Aktif', $activeSessions)
+                ->description($graceCount.' grace period')
+                ->icon('heroicon-o-wifi')
+                ->color($activeSessions > 0 ? 'success' : 'gray'),
         ];
     }
 }
