@@ -30,20 +30,50 @@ class ManagePortalConfig extends Page implements HasForms
             'branding' => $config->branding ?? ['name' => '', 'color' => '#6366f1', 'logo' => null],
             'active_login_methods' => $config->active_login_methods ?? ['google' => true, 'wa' => true, 'email' => false],
             'grace_period_enabled' => $config->grace_period_enabled ?? true,
-            'grace_period_seconds' => $config->grace_period_seconds ?? 7200,
+            'grace_period_seconds' => $this->toSuffix($config->grace_period_seconds ?? 7200),
             'custom_login_enabled' => $config->custom_login_enabled ?? true,
             'custom_login_label' => $config->custom_login_label ?? 'Nomor Kamar',
             'custom_login_placeholder' => $config->custom_login_placeholder ?? 'Contoh: 101',
             'hotspot_profile_name' => $config->hotspot_profile_name ?? 'luma-portal',
             'address_pool_name' => $config->address_pool_name ?? 'hotspot-pool',
             'dns_name' => $config->dns_name ?? 'portal.lumanetwork.id',
-            'session_timeout' => $config->session_timeout ?? 0,
-            'idle_timeout' => $config->idle_timeout ?? 0,
+            'session_timeout' => $this->toSuffix($config->session_timeout ?? 0),
+            'idle_timeout' => $this->toSuffix($config->idle_timeout ?? 0),
             'shared_users' => $config->shared_users ?? 3,
             'room_validation_enabled' => $config->room_validation_enabled ?? false,
             'room_validation_mode' => $config->room_validation_mode ?? 'range',
             'room_validation_config' => $config->room_validation_config ?? [],
         ]);
+    }
+
+    /**
+     * Convert MikroTik-style duration to seconds.
+     * "10m" = 600, "2h" = 7200, "1d" = 86400, "30s" = 30, "3600" = 3600
+     */
+    protected function toSeconds(?string $val): int
+    {
+        if (empty($val) || $val === '0') return 0;
+        $val = trim(strtolower($val));
+
+        if (str_ends_with($val, 'd')) return (int) $val * 86400;
+        if (str_ends_with($val, 'h')) return (int) $val * 3600;
+        if (str_ends_with($val, 'm')) return (int) $val * 60;
+        if (str_ends_with($val, 's')) return (int) $val;
+
+        return (int) $val;
+    }
+
+    /**
+     * Convert seconds to MikroTik-style readable format.
+     * 86400 => "1d", 7200 => "2h", 600 => "10m", 0 => "0"
+     */
+    protected function toSuffix(?int $seconds): string
+    {
+        if (empty($seconds)) return '0';
+        if ($seconds >= 86400 && $seconds % 86400 === 0) return ($seconds / 86400) . 'd';
+        if ($seconds >= 3600 && $seconds % 3600 === 0) return ($seconds / 3600) . 'h';
+        if ($seconds >= 60 && $seconds % 60 === 0) return ($seconds / 60) . 'm';
+        return (string) $seconds;
     }
 
     protected function getConfig(): PortalConfig
@@ -63,8 +93,8 @@ class ManagePortalConfig extends Page implements HasForms
                 'hotspot_profile_name' => 'luma-portal',
                 'address_pool_name' => 'hotspot-pool',
                 'dns_name' => 'portal.lumanetwork.id',
-                'session_timeout' => 14400,
-                'idle_timeout' => 1800,
+                'session_timeout' => 0,
+                'idle_timeout' => 0,
                 'shared_users' => 3,
                 'room_validation_enabled' => false,
                 'room_validation_mode' => 'range',
@@ -176,18 +206,16 @@ class ManagePortalConfig extends Page implements HasForms
                             ->default('portal.lumanetwork.id'),
                         
                         Forms\Components\TextInput::make('session_timeout')
-                            ->label('Session Timeout (detik) - Opsional')
-                            ->numeric()
+                            ->label('Session Timeout')
                             ->nullable()
-                            ->default(0)
-                            ->helperText('0 = tanpa batas. Diatur via FreeRADIUS radreply (Session-Timeout).'),
+                            ->default('0')
+                            ->helperText('Format MikroTik: 10m, 2h, 1d, atau detik. 0 = tanpa batas.'),
 
                         Forms\Components\TextInput::make('idle_timeout')
-                            ->label('Idle Timeout (detik) - Opsional')
-                            ->numeric()
+                            ->label('Idle Timeout')
                             ->nullable()
-                            ->default(0)
-                            ->helperText('0 = tanpa batas. Diatur via FreeRADIUS radreply (Idle-Timeout).'),
+                            ->default('0')
+                            ->helperText('Format MikroTik: 10m, 2h, 1d, atau detik. 0 = tanpa batas.'),
 
                         Forms\Components\TextInput::make('shared_users')
                             ->label('Shared Users')
@@ -204,12 +232,10 @@ class ManagePortalConfig extends Page implements HasForms
                             ->label('Aktifkan Grace Period')
                             ->default(true),
                         Forms\Components\TextInput::make('grace_period_seconds')
-                            ->label('Durasi Grace Period (detik)')
-                            ->numeric()
-                            ->minValue(60)
+                            ->label('Durasi Grace Period')
                             ->required()
-                            ->default(7200)
-                            ->helperText('Semakin lama, semakin nyaman untuk tamu (7200 = 2 jam)'),
+                            ->default('2h')
+                            ->helperText('Format: 30m, 2h, 4h, 1d, atau detik. Semakin lama semakin nyaman untuk tamu.'),
                     ]),
             ])
             ->statePath('data');
@@ -218,11 +244,18 @@ class ManagePortalConfig extends Page implements HasForms
     public function save(): void
     {
         $config = $this->getConfig();
-        $config->update($this->data);
+
+        // Convert suffix values ke seconds sebelum simpan
+        $data = $this->data;
+        $data['session_timeout'] = $this->toSeconds($this->data['session_timeout'] ?? '0');
+        $data['idle_timeout'] = $this->toSeconds($this->data['idle_timeout'] ?? '0');
+        $data['grace_period_seconds'] = $this->toSeconds($this->data['grace_period_seconds'] ?? '7200');
+
+        $config->update($data);
 
         $tenantId = auth('tenant_users')->user()->tenant_id;
-        $timeout = ($this->data['session_timeout'] ?? 0) ?: 0;
-        $idleTimeout = ($this->data['idle_timeout'] ?? 0) ?: 0;
+        $timeout = $data['session_timeout'] ?? 0;
+        $idleTimeout = $data['idle_timeout'] ?? 0;
         $sharedUsers = $this->data['shared_users'] ?? 3;
 
         $errors = [];
