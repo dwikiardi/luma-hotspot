@@ -137,7 +137,7 @@ class ROIReport extends Page
             'totalUsers' => 0, 'uniqueUsers7d' => 0, 'totalSessions' => 0,
             'sessionsToday' => 0, 'activeNow' => 0, 'inGrace' => 0,
             'repeatMacCount' => 0, 'repeatMacs' => [],
-            'inGracePeriod' => 0, 'autoReconnects7d' => 0,
+            'inGracePeriod' => 0,
             'identityTypes' => ['room' => 0, 'google' => 0, 'wa' => 0, 'email' => 0],
         ];
     }
