@@ -48,7 +48,7 @@ pool = RouterOsApiPool({$escapedIp}, username="admin", password="", plaintext_lo
 api = pool.get_api()
 active = api.get_resource("/ip/hotspot/active")
 for e in active.get():
-    print(f"=user={{e.get('user','')}}=address={{e.get('address','')}}")
+    print("=user=" + str(e.get("user","")) + "=address=" + str(e.get("address","")))
 pool.disconnect()
 PYEOF;
 

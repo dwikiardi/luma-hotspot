@@ -21,6 +21,7 @@ Route::get('/portal', [PortalController::class, 'show'])->name('portal');
 Route::get('/auth/google', [AuthController::class, 'googleRedirect'])->name('login.google');
 Route::get('/auth/google/callback', [AuthController::class, 'googleCallback']);
 Route::get('/auth/callback', [AuthController::class, 'googleCallback']);
+Route::get('/callback', [AuthController::class, 'googleCallback']);
 Route::post('/auth/wa/request', [AuthController::class, 'waRequest']);
 Route::post('/auth/wa/verify', [AuthController::class, 'waVerify']);
 Route::post('/auth/room', [AuthController::class, 'room']);
