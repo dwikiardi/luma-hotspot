@@ -11,6 +11,8 @@ class GracePeriodStatsWidget extends ChartWidget
 {
     protected static ?string $heading = 'Login per Hari (7 hari)';
 
+    protected static ?string $pollingInterval = '10s';
+
     protected function getData(): array
     {
         $tenant = filament()->getTenant();

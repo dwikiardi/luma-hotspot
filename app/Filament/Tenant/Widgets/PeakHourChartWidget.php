@@ -10,7 +10,7 @@ class PeakHourChartWidget extends ChartWidget
 {
     protected int|string|array $columnSpan = 'full';
 
-    protected static ?string $pollingInterval = '30s';
+    protected static ?string $pollingInterval = '10s';
 
     protected function getData(): array
     {

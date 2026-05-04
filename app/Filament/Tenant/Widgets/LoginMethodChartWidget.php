@@ -10,6 +10,8 @@ class LoginMethodChartWidget extends ChartWidget
 {
     protected static ?string $heading = 'Metode Login';
 
+    protected static ?string $pollingInterval = '10s';
+
     protected function getData(): array
     {
         $tenant = filament()->getTenant();
