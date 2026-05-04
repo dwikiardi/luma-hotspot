@@ -172,7 +172,7 @@ class GracePeriodEngine
                 ->update(['status' => 'expired']);
         }
 
-        return UserSession::create([
+        $session = UserSession::create([
             'user_id' => $user->id,
             'device_id' => $device->id,
             'router_id' => $router->id,
@@ -193,5 +193,36 @@ class GracePeriodEngine
                 'remote_id' => $request->input('remote_id'),
             ],
         ]);
+
+        // Catat fingerprint device
+        $this->logDeviceFingerprint($request, $user, $device, $router);
+
+        return $session;
+    }
+
+    /**
+     * Catat fingerprint device ke log
+     */
+    private function logDeviceFingerprint(Request $request, User $user, Device $device, Router $router): void
+    {
+        try {
+            $fp = $request->header('X-Fingerprint') ?? $request->input('fingerprint') ?? ('fp-'.substr(md5($request->userAgent()), 0, 16));
+            
+            \App\Models\DeviceFingerprint::firstOrCreate(
+                ['fingerprint_hash' => $fp],
+                [
+                    'user_id' => $user->id,
+                    'device_id' => $device->id,
+                    'ip_address' => $request->header('X-Forwarded-For') ?? $request->ip(),
+                    'nas_id' => $router->nas_identifier,
+                    'user_agent' => $request->userAgent(),
+                    'mac' => $request->query('client_mac') ?? $request->input('client_mac'),
+                    'trust_score' => 50,
+                    'confidence' => 'low',
+                ]
+            );
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('DeviceFingerprint log failed', ['error' => $e->getMessage()]);
+        }
     }
 }
