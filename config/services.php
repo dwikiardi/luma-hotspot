@@ -33,4 +33,11 @@ return [
         'redirect' => env('GOOGLE_REDIRECT_URI', '/auth/google/callback'),
     ],
 
+    'auth0' => [
+        'client_id' => env('AUTH0_CLIENT_ID'),
+        'client_secret' => env('AUTH0_CLIENT_SECRET'),
+        'redirect' => env('AUTH0_REDIRECT_URI'),
+        'base_url' => 'https://' . env('AUTH0_DOMAIN'),
+    ],
+
 ];
