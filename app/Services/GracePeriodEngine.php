@@ -50,17 +50,16 @@ class GracePeriodEngine
         $hasValidMac = $mac && $mac !== 'unknown';
         $hasFingerprint = !empty($fingerprint);
         $hasCookie = !empty($cookie);
-        $isCNA = str_contains($request->userAgent() ?? '', 'CaptiveNetworkSupport');
+        $isCNA = str_contains($request->userAgent() ?? '', 'CaptiveNetworkSupport')
+            || str_contains($request->header('User-Agent') ?? '', 'CaptiveNetworkSupport');
 
-        // iPhone CNA: tidak bisa fingerprint/cookie → auto-login session terbaru
+        // iPhone CNA: tidak ada fingerprint/cookie → auto-login session yg baru disconnected
+        // Hanya jika disconnected dalam 10 menit terakhir & cuma 1 session
         if ($isCNA && !$hasFingerprint && !$hasCookie && $sessions->isNotEmpty()) {
-            return GraceCheckResult::autoLogin($sessions->first());
-        }
-
-        // Fallback: jika tidak ada sinyal sama sekali (random MAC, no fp, no cookie)
-        // dan cuma ada 1 disconnected session → auto-login
-        if (!$hasFingerprint && !$hasCookie && !$hasValidMac && $sessions->count() === 1) {
-            return GraceCheckResult::autoLogin($sessions->first());
+            $recentSession = $sessions->first();
+            if ($recentSession->disconnected_at && $recentSession->disconnected_at->diffInMinutes(now()) <= 10) {
+                return GraceCheckResult::autoLogin($recentSession);
+            }
         }
 
         foreach ($sessions as $session) {
