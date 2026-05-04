@@ -21,7 +21,6 @@ class MikroTikApiService
 
         $commands = [
             "/ip hotspot active remove [find where user='{$username}']",
-            "/ip hotspot user remove [find where name='{$username}']",
         ];
 
         foreach ($commands as $cmd) {
