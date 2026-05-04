@@ -37,7 +37,7 @@ class GracePeriodEngine
     {
         $mac = $request->query('client_mac');
         $cookie = $request->cookie('luma_session');
-        $fingerprint = $request->header('X-Fingerprint');
+        $fingerprint = $request->header('X-Fingerprint') ?? $request->query('fingerprint');
         $ip = $request->ip();
         $nasId = $router->nas_identifier;
 

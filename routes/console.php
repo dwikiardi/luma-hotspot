@@ -120,7 +120,7 @@ Schedule::call(function () {
             ->update([
                 'status' => 'disconnected',
                 'disconnected_at' => $rec->acctstoptime,
-                'expires_at' => \Illuminate\Support\Facades\DB::raw("disconnected_at + interval '{$graceSeconds} seconds'"),
+                'expires_at' => \Illuminate\Support\Facades\DB::raw("now() + interval '{$graceSeconds} seconds'"),
                 'mac_address' => $rec->callingstationid ?: \Illuminate\Support\Facades\DB::raw('mac_address'),
                 'ip_address' => $rec->framedipaddress 
                     ? preg_replace('/\/\d+$/', '', $rec->framedipaddress) 

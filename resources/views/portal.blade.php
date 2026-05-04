@@ -321,6 +321,14 @@
             fingerprint = "fp-br-" + Math.abs(h).toString(16);
         }
         generateFingerprint();
+        
+        // Redirect ke URL dgn fingerprint supaya GracePeriodEngine bisa cek
+        if (fingerprint && !window.location.search.includes("fingerprint=")) {
+            var newUrl = window.location.href;
+            var sep = window.location.search ? "&" : "?";
+            window.location.replace(newUrl + sep + "fingerprint=" + fingerprint);
+        }
+        
         var linkLogin = "", dstUrl = "https://www.google.com";
         var otpDigits = ["", "", "", "", "", ""];
 
