@@ -40,4 +40,11 @@ return [
         'base_url' => 'https://' . env('AUTH0_DOMAIN'),
     ],
 
+    'auth0socialite' => [
+        'client_id' => env('AUTH0_CLIENT_ID'),
+        'client_secret' => env('AUTH0_CLIENT_SECRET'),
+        'redirect' => env('AUTH0_REDIRECT_URI'),
+        'base_url' => 'https://' . env('AUTH0_DOMAIN'),
+    ],
+
 ];

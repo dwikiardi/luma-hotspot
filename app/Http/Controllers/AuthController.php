@@ -24,89 +24,36 @@ class AuthController extends Controller
 
     public function googleRedirect(Request $request)
     {
-        // Redirect ke Auth0 Universal Login
-        $auth0Domain = config('services.auth0.base_url');
-        $clientId = config('services.auth0.client_id');
-        $redirectUri = config('services.auth0.redirect');
-        $state = bin2hex(random_bytes(16));
-
-        $request->session()->put('auth0_state', $state);
         $request->session()->put('nas_id', $request->query('nas_id'));
         $request->session()->put('client_mac', $request->query('client_mac'));
         $request->session()->put('login_method', 'google');
         $request->session()->put('link_login', $request->query('link_login'));
         $request->session()->put('dst_url', $request->query('dst') ?? 'https://www.google.com');
 
-        $params = http_build_query([
-            'response_type' => 'code',
-            'client_id' => $clientId,
-            'redirect_uri' => $redirectUri,
-            'scope' => 'openid profile email',
-            'state' => $state,
-            'connection' => 'google-oauth2',
-        ]);
-
-        return redirect($auth0Domain . '/authorize?' . $params);
+        return Socialite::driver('google')->redirect();
     }
 
     public function googleCallback(Request $request)
     {
         try {
-            // Verify state
-            if ($request->query('state') !== $request->session()->pull('auth0_state')) {
-                return redirect('/portal?' . http_build_query([
-                    'nas_id' => $request->session()->get('nas_id'),
-                    'client_mac' => $request->session()->get('client_mac'),
-                    'error' => 'Invalid state',
-                ]));
-            }
-
-            // Exchange code for token
-            $auth0Domain = config('services.auth0.base_url');
-            $clientId = config('services.auth0.client_id');
-            $clientSecret = config('services.auth0.client_secret');
-            $redirectUri = config('services.auth0.redirect');
-
-            $response = \Illuminate\Support\Facades\Http::asForm()->post($auth0Domain . '/oauth/token', [
-                'grant_type' => 'authorization_code',
-                'client_id' => $clientId,
-                'client_secret' => $clientSecret,
-                'code' => $request->query('code'),
-                'redirect_uri' => $redirectUri,
-            ]);
-
-            if (! $response->successful()) {
-                throw new \Exception('Token exchange failed: ' . $response->body());
-            }
-
-            $tokens = $response->json();
-
-            // Get user info
-            $userResponse = \Illuminate\Support\Facades\Http::withToken($tokens['access_token'])
-                ->get($auth0Domain . '/userinfo');
-
-            if (! $userResponse->successful()) {
-                throw new \Exception('Userinfo failed');
-            }
-
-            $auth0User = $userResponse->json();
+            $googleUser = Socialite::driver('google')->stateless()->user();
 
             $user = User::updateOrCreate(
                 [
-                    'identity_value' => $auth0User['email'] ?? $auth0User['sub'],
+                    'identity_value' => $googleUser->getEmail(),
                     'identity_type' => 'google',
                 ],
                 [
-                    'name' => $auth0User['name'] ?? $auth0User['email'] ?? 'Google User',
-                    'avatar' => $auth0User['picture'] ?? null,
+                    'name' => $googleUser->getName(),
+                    'avatar' => $googleUser->getAvatar(),
                 ]
             );
 
             return $this->processLoginRedirect($request, $user, 'google');
         } catch (\Exception $e) {
-            Log::error('Auth0 callback failed', ['error' => $e->getMessage()]);
+            Log::error('Google OAuth failed', ['error' => $e->getMessage()]);
 
-            return redirect('/portal?' . http_build_query([
+            return redirect('/portal?'.http_build_query([
                 'nas_id' => $request->session()->get('nas_id'),
                 'client_mac' => $request->session()->get('client_mac'),
                 'error' => 'Authentication failed',
