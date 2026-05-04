@@ -69,11 +69,11 @@ class StatsOverviewWidget extends BaseWidget
         } catch (\Throwable) {}
 
         return [
-            Stat::make('Online', $uniqueOnline)
-                ->description($activeSessions.' sesi, '.$graceCount.' grace')
+            Stat::make('Online (Luma)', $uniqueOnline)
+                ->description($graceCount.' dalam grace period')
                 ->icon('heroicon-o-users')
                 ->color($uniqueOnline > 0 ? 'primary' : 'gray'),
-            Stat::make('Hotspot MikroTik', $mikrotikOnline)
+            Stat::make('Online (MikroTik)', $mikrotikOnline)
                 ->description('langsung dari router')
                 ->icon('heroicon-o-signal')
                 ->color($mikrotikOnline > 0 ? 'success' : 'warning'),
@@ -81,10 +81,10 @@ class StatsOverviewWidget extends BaseWidget
                 ->description('7 hari terakhir')
                 ->icon('heroicon-o-check-circle')
                 ->color('success'),
-            Stat::make('Sesi Aktif', $activeSessions)
-                ->description($graceCount.' grace period')
-                ->icon('heroicon-o-wifi')
-                ->color($activeSessions > 0 ? 'success' : 'gray'),
+            Stat::make('Grace Period', $graceCount)
+                ->description('bisa auto-reconnect')
+                ->icon('heroicon-o-clock')
+                ->color($graceCount > 0 ? 'warning' : 'gray'),
         ];
     }
 }
