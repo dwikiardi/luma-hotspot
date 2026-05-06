@@ -36,9 +36,22 @@ Schedule::call(function () {
 })->hourly();
 
 Schedule::call(function () {
+    // Dapatkan grace period (default 48 jam)
+    $grace = 172800;
+    try { 
+        $r = \App\Models\Router::first(); 
+        if ($r?->tenant?->portalConfig?->grace_period_seconds > 0) {
+            $grace = $r->tenant->portalConfig->grace_period_seconds;
+        }
+    } catch (\Throwable) {}
+
     UserSession::where('status', 'active')
         ->where('expires_at', '<', now())
-        ->update(['status' => 'disconnected', 'disconnected_at' => now()]);
+        ->update([
+            'status' => 'disconnected', 
+            'disconnected_at' => \Illuminate\Support\Facades\DB::raw('expires_at'),
+            'expires_at' => \Illuminate\Support\Facades\DB::raw("expires_at + interval '{$grace} seconds'"),
+        ]);
 })->everyMinute();
 
 // Sync radacct to user_sessions: update MAC/IP untuk session yang match MAC
@@ -97,23 +110,23 @@ Schedule::call(function () {
         ->orderByDesc('radacctid')
         ->get();
 
+    // Dapatkan grace period dari portal config (default 48 jam)
+    $graceSeconds = 172800; // default 2 hari
+    try {
+        $firstRouter = \App\Models\Router::first();
+        if ($firstRouter && $firstRouter->tenant) {
+            $config = $firstRouter->tenant->portalConfig ?? null;
+            if ($config && $config->grace_period_seconds > 0) {
+                $graceSeconds = $config->grace_period_seconds;
+            }
+        }
+    } catch (\Throwable) {}
+
     foreach ($stopped as $rec) {
         $user = \Illuminate\Support\Facades\DB::table('users')
             ->where('identity_value', $rec->username)
             ->first();
         if (! $user) continue;
-
-        // Dapatkan grace_period dari router yg terkait
-        $graceSeconds = 7200; // default 2 jam
-        $session = \App\Models\UserSession::where('user_id', $user->id)
-            ->where('status', 'active')
-            ->first();
-        if ($session && $session->router) {
-            $config = $session->router->tenant->portalConfig ?? null;
-            if ($config) {
-                $graceSeconds = $config->grace_period_seconds ?? 7200;
-            }
-        }
 
         \App\Models\UserSession::where('user_id', $user->id)
             ->where('status', 'active')
