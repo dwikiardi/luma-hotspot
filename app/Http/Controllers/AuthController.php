@@ -222,6 +222,14 @@ class AuthController extends Controller
             ]
         );
 
+        // RADIUS Class attribute untuk device tracking (CNA-friendly)
+        // MikroTik menyimpan ini dan mengirim balik di Access-Request berikutnya
+        $deviceClass = 'lumadev-' . substr(md5($mac . ($request->header('X-Fingerprint') ?? '')), 0, 16);
+        \DB::table('radreply')->updateOrInsert(
+            ['username' => $user->identity_value, 'attribute' => 'Class'],
+            ['op' => ':=', 'value' => $deviceClass]
+        );
+
         $nasId = $request->session()->get('nas_id') ?? $request->input('nas_id') ?? $request->query('nas_id');
         $mac = $request->session()->get('client_mac') ?? $request->input('client_mac') ?? $request->query('client_mac') ?? 'unknown';
         $linkLogin = $request->input('link_login') ?? $request->session()->get('link_login') ?? $request->query('link_login');

@@ -4,7 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ $branding['name'] ?? 'Guest WiFi' }} - Luma Network</title>
-    <script defer src="/js/fingerprintjs.min.js"></script>
+    <script>
+    // FingerprintJS v5 via dynamic import (stable visitorId across sessions)
+    var fpPromise = null;
+    try {
+        fpPromise = import('https://openfpcdn.io/fingerprintjs/v5')
+            .then(function(FingerprintJS) { return FingerprintJS.load(); });
+    } catch(e) { console.log('FingerprintJS import failed:', e); }
+    </script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -309,25 +316,35 @@
         var waPhone = "", roomNumber = "", loading = false;
         var fingerprint = "", trustScore = 50;
         
-        // Generate simple fingerprint from browser data
-        function generateFingerprint() {
-            var ua = navigator.userAgent || "";
-            var scr = screen.width + "x" + screen.height + "x" + screen.colorDepth;
-            var tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
-            var cores = navigator.hardwareConcurrency || "";
-            var raw = ua + scr + tz + cores;
-            var h = 0;
-            for (var i = 0; i < raw.length; i++) { var c = raw.charCodeAt(i); h = ((h << 5) - h) + c; h = h & h; }
-            fingerprint = "fp-br-" + Math.abs(h).toString(16);
+        // FingerprintJS v5 — stable visitorId across sessions
+        var fpLoaded = false;
+        function initFingerprint() {
+            if (fpPromise) {
+                fpPromise.then(function(fp) { return fp.get(); }).then(function(result) {
+                    fingerprint = result.visitorId;
+                    fpLoaded = true;
+                    redirectWithFingerprint();
+                }).catch(function() { redirectWithFingerprint(); });
+            }
+            // Timeout: jika dynamic import lambat, pakai fallback setelah 5 detik
+            setTimeout(function() {
+                if (!fpLoaded) {
+                    fingerprint = "fp-" + navigator.userAgent.replace(/[^a-z0-9]/gi,'').substring(0,30);
+                    redirectWithFingerprint();
+                }
+            }, 5000);
         }
-        generateFingerprint();
         
-        // Redirect ke URL dgn fingerprint supaya GracePeriodEngine bisa cek
-        if (fingerprint && !window.location.search.includes("fingerprint=")) {
-            var newUrl = window.location.href;
-            var sep = window.location.search ? "&" : "?";
-            window.location.replace(newUrl + sep + "fingerprint=" + fingerprint);
+        function redirectWithFingerprint() {
+            if (!fingerprint) { fingerprint = "fp-" + Date.now(); }
+            if (!window.location.search.includes('fingerprint=') && !window.location.search.includes('vid=')) {
+                var newUrl = window.location.href;
+                var sep = window.location.search ? '&' : '?';
+                window.location.replace(newUrl + sep + 'fingerprint=' + fingerprint);
+            }
         }
+        
+        initFingerprint();
         
         var linkLogin = "", dstUrl = "https://www.google.com";
         var otpDigits = ["", "", "", "", "", ""];
