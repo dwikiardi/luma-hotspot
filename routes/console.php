@@ -36,12 +36,14 @@ Schedule::call(function () {
 })->hourly();
 
 Schedule::call(function () {
-    // Dapatkan grace period (default 48 jam)
+    // Dapatkan grace period dari portal config tenant active (default 48 jam)
     $grace = 172800;
-    try { 
-        $r = \App\Models\Router::first(); 
-        if ($r?->tenant?->portalConfig?->grace_period_seconds > 0) {
-            $grace = $r->tenant->portalConfig->grace_period_seconds;
+    try {
+        $config = \App\Models\PortalConfig::whereHas('tenant', function ($q) {
+            $q->whereHas('routers');
+        })->where('grace_period_seconds', '>', 0)->first();
+        if ($config) {
+            $grace = $config->grace_period_seconds;
         }
     } catch (\Throwable) {}
 
@@ -110,15 +112,14 @@ Schedule::call(function () {
         ->orderByDesc('radacctid')
         ->get();
 
-    // Dapatkan grace period dari portal config (default 48 jam)
-    $graceSeconds = 172800; // default 2 hari
+    // Dapatkan grace period dari portal config tenant active (default 48 jam)
+    $graceSeconds = 172800;
     try {
-        $firstRouter = \App\Models\Router::first();
-        if ($firstRouter && $firstRouter->tenant) {
-            $config = $firstRouter->tenant->portalConfig ?? null;
-            if ($config && $config->grace_period_seconds > 0) {
-                $graceSeconds = $config->grace_period_seconds;
-            }
+        $config = \App\Models\PortalConfig::whereHas('tenant', function ($q) {
+            $q->whereHas('routers');
+        })->where('grace_period_seconds', '>', 0)->first();
+        if ($config) {
+            $graceSeconds = $config->grace_period_seconds;
         }
     } catch (\Throwable) {}
 
@@ -128,12 +129,14 @@ Schedule::call(function () {
             ->first();
         if (! $user) continue;
 
+        // Hanya disconnect session yg dibuat SEBELUM acctstoptime (bukan yg baru dibuat)
         \App\Models\UserSession::where('user_id', $user->id)
             ->where('status', 'active')
+            ->where('login_at', '<', $rec->acctstoptime)
             ->update([
                 'status' => 'disconnected',
                 'disconnected_at' => $rec->acctstoptime,
-                'expires_at' => \Illuminate\Support\Facades\DB::raw("now() + interval '{$graceSeconds} seconds'"),
+                'expires_at' => \Illuminate\Support\Facades\DB::raw("'{$rec->acctstoptime}'::timestamp + interval '{$graceSeconds} seconds'"),
                 'mac_address' => $rec->callingstationid ?: \Illuminate\Support\Facades\DB::raw('mac_address'),
                 'ip_address' => $rec->framedipaddress 
                     ? preg_replace('/\/\d+$/', '', $rec->framedipaddress) 

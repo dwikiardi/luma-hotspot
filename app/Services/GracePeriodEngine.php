@@ -227,9 +227,25 @@ class GracePeriodEngine
         try {
             $fp = $request->header('X-Fingerprint') ?? $request->input('fingerprint') ?? ('fp-'.substr(md5($request->userAgent()), 0, 16));
             
-            \App\Models\DeviceFingerprint::firstOrCreate(
-                ['fingerprint_hash' => $fp],
-                [
+            $existing = \App\Models\DeviceFingerprint::where('fingerprint_hash', $fp)->first();
+            
+            if ($existing) {
+                $matches = $existing->match_count + 1;
+                $score = min(95, 50 + ($matches * 15)); // 50→65→80→95
+                $existing->update([
+                    'trust_score' => $score,
+                    'confidence' => $matches >= 3 ? 'high' : ($matches >= 2 ? 'medium' : 'low'),
+                    'match_count' => $matches,
+                    'is_known_device' => $matches >= 2,
+                    'user_id' => $user->id,
+                    'ip_address' => $request->header('X-Forwarded-For') ?? $request->ip(),
+                    'nas_id' => $router->nas_identifier,
+                    'user_agent' => $request->userAgent(),
+                    'mac' => $request->query('client_mac') ?? $request->input('client_mac'),
+                ]);
+            } else {
+                \App\Models\DeviceFingerprint::create([
+                    'fingerprint_hash' => $fp,
                     'user_id' => $user->id,
                     'device_id' => $device->id,
                     'ip_address' => $request->header('X-Forwarded-For') ?? $request->ip(),
@@ -238,8 +254,8 @@ class GracePeriodEngine
                     'mac' => $request->query('client_mac') ?? $request->input('client_mac'),
                     'trust_score' => 50,
                     'confidence' => 'low',
-                ]
-            );
+                ]);
+            }
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::warning('DeviceFingerprint log failed', ['error' => $e->getMessage()]);
         }
