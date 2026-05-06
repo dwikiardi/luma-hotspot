@@ -83,14 +83,26 @@ class PortalController extends Controller
 
         $graceResult = $this->graceEngine->check($request, $router);
 
-$cookie = $request->cookie('luma_session');
-        $activeSession = $cookie
-            ? UserSession::where('cookie_token', $cookie)
+        // Cek session aktif via MAC (untuk device tanpa cookie seperti sync sessions)
+        $activeSession = null;
+        if ($mac && $mac !== 'unknown') {
+            $activeSession = UserSession::where('mac_address', $mac)
                 ->where('router_id', $router->id)
                 ->where('status', 'active')
                 ->where('expires_at', '>', now())
-                ->first()
-            : null;
+                ->first();
+        }
+
+        if (! $activeSession) {
+            $cookie = $request->cookie('luma_session');
+            $activeSession = $cookie
+                ? UserSession::where('cookie_token', $cookie)
+                    ->where('router_id', $router->id)
+                    ->where('status', 'active')
+                    ->where('expires_at', '>', now())
+                    ->first()
+                : null;
+        }
 
         if ($activeSession) {
             $user = User::find($activeSession->user_id);
