@@ -160,6 +160,47 @@ class GracePeriodEngine
             }
         }
 
+        // After disconnected loop, check active sessions with fingerprint/cookie/MAC
+        // (handles case where sync reactivated session but MAC changed)
+        if ($hasFingerprint || $hasCookie || $hasValidMac) {
+            $activeSessions = UserSession::where('status', 'active')
+                ->where('router_id', $router->id)
+                ->where('expires_at', '>', now())
+                ->get();
+
+            foreach ($activeSessions as $session) {
+                $score = 0;
+
+                if ($hasFingerprint && $session->fingerprint_hash === $fingerprint) {
+                    $score += 5;
+                }
+                if ($hasCookie && $session->cookie_token === $cookie) {
+                    $score += 5;
+                }
+                if ($hasValidMac && $session->mac_address === $mac) {
+                    $score += 2;
+                }
+                if ($ip && $session->ip_address === $ip) {
+                    $score += 2;
+                }
+                if ($ip && $session->ip_address && $session->ip_address === $ip
+                    && $session->nas_id === $nasId) {
+                    $score += 1;
+                }
+
+                $threshold = 3;
+                if ($hasFingerprint || $hasCookie) {
+                    $threshold = 1;
+                } elseif (!$hasValidMac) {
+                    $threshold = 2;
+                }
+
+                if ($score >= $threshold) {
+                    return GraceCheckResult::autoLogin($session);
+                }
+            }
+        }
+
         return GraceCheckResult::requireLogin();
     }
 
