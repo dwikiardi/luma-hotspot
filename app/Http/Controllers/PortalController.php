@@ -215,6 +215,13 @@ class PortalController extends Controller
         $username = $user->identity_value;
         $password = $user->identity_value;
 
+        // Disconnect old session on MikroTik to prevent "already active" conflict
+        try {
+            app(\App\Services\MikroTikApiService::class)->disconnectUser($username, $router);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('MikroTik pre-disconnect failed', ['error' => $e->getMessage()]);
+        }
+
         $redirectUrl = $this->buildMikroTikLoginUrl($router, $username, $password, $linkLogin, $dstUrl);
 
         $this->analytics->track('auto_reconnect', [
