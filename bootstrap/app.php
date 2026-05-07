@@ -21,6 +21,7 @@ return Application::configure(basePath: dirname(__DIR__))
             '/api/fingerprint',
             '/api/fingerprint/*',
             '/radius/accounting',
+            '/api/dhcp-hook',
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

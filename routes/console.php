@@ -168,6 +168,11 @@ Schedule::call(function () {
     }
 })->everyMinute();
 
+// Cleanup pending_connections > 2 minutes old
+Schedule::call(function () {
+    \App\Models\PendingConnection::where('created_at', '<', now()->subMinutes(2))->delete();
+})->everyMinute();
+
 // Sync MikroTik active → create missing DB sessions
 Schedule::call(function () {
     try {

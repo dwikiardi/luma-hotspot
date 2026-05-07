@@ -123,6 +123,22 @@ PYEOF;
         $this->execPython($script);
     }
 
+    /**
+     * Set DHCP lease-script on MikroTik.
+     * Creates luma-dhcp-hook system script and sets it as lease-script.
+     */
+    public function setLeaseScript(Router $router): void
+    {
+        $mikrotikIp = $this->getMikroTikIp($router);
+        $escapedIp = escapeshellarg($mikrotikIp);
+
+        // Use pre-written Python script (too complex for inline heredoc)
+        $script = file_get_contents(base_path('stubs/set_lease_script.py'));
+        $script = str_replace("10.0.70.4", $mikrotikIp, $script);
+
+        $this->execPython($script);
+    }
+
     public function getHostByMac(Router $router, string $mac): ?array
     {
         if ($mac === 'unknown') return null;

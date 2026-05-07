@@ -205,6 +205,28 @@ class PortalController extends Controller
             return $this->silentAutoLogin($request, $session, $router, $linkLogin, $dstUrl, $clientIp);
         }
 
+        // Pending connection: device baru connect via DHCP (lease-script trigger)
+        // Kalau ada session active di router ini, auto-login tanpa sinyal fingerprint/cookie
+        $pending = \App\Models\PendingConnection::where('router_id', $router->id)
+            ->where('created_at', '>', now()->subMinutes(2))
+            ->latest()
+            ->first();
+
+        if ($pending) {
+            $anySession = UserSession::where('router_id', $router->id)
+                ->where('status', 'active')
+                ->where('expires_at', '>', now())
+                ->first();
+
+            if ($anySession) {
+                \App\Services\ActivityLogger::log('dhcp_hook', 'pre_auth',
+                    "Pre-auth via DHCP lease: MAC={$mac} → session {$anySession->id}",
+                    ['mac' => $mac, 'pending_mac' => $pending->mac_address, 'session_id' => $anySession->id]
+                );
+                return $this->silentAutoLogin($request, $anySession, $router, $linkLogin, $dstUrl, $clientIp);
+            }
+        }
+
         \App\Services\ActivityLogger::portalLoginForm('no active session & no grace match');
 
         $config = $router->tenant->portalConfig;
