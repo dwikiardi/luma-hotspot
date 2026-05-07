@@ -340,6 +340,17 @@
                 window.location.replace(newUrl + sep + 'fingerprint=' + fingerprint);
             }
         }
+
+        // Hide login form until fingerprint is generated (prevents flash)
+        (function() {
+            var hasFingerprint = window.location.search.includes('fingerprint=') || window.location.search.includes('vid=');
+            if (!hasFingerprint) {
+                var content = document.querySelector('.content');
+                if (content) {
+                    content.innerHTML = '<div style="text-align:center;padding:60px 20px"><div class="spinner" style="border-color:#6366f1;border-top-color:transparent;margin:0 auto 20px;width:32px;height:32px"></div><p style="color:#6b7280">Menyiapkan koneksi...</p></div>';
+                }
+            }
+        })();
         
         initFingerprint();
         

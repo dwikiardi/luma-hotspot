@@ -22,7 +22,6 @@ class PortalController extends Controller
         $mac = $request->query('client_mac') ?? $request->query('mac') ?? $request->query('callingstationid') ?? 'unknown';
         $linkLogin = $request->query('link_login');
         $dstUrl = $request->query('dst') ?? $request->query('redirect') ?? 'https://www.google.com';
-        $isBrowser = $request->query('browser') === '1';
 
         // Get real client IP from various sources (never empty string)
         $clientIp = $request->query('ip') 
@@ -75,52 +74,8 @@ class PortalController extends Controller
             ]);
         }
 
-        // CAPTIVE PORTAL → REDIRECT TO SYSTEM BROWSER
-        // Captive portal (CNA/WebView) gak punya JS fingerprint & cookies tidak persisten
-        // Deteksi: iOS tanpa browser=1, atau Android (semua WebView)
-        $isIOSDevice = $this->isIOS($request->userAgent() ?? '');
-        $isAndroidDevice = $this->isAndroid($request->userAgent() ?? '');
-        $isCaptivePortal = ($isIOSDevice || $isAndroidDevice) && !$isBrowser;
-
-        if ($isCaptivePortal) {
-            $params = http_build_query([
-                'nas_id' => $nasId,
-                'client_mac' => $mac,
-                'link_login' => $linkLogin,
-                'dst' => $dstUrl,
-                'browser' => '1',
-            ]);
-            $portalUrl = url('/portal?' . $params);
-
-            if ($isIOSDevice) {
-                $safariUrl = str_replace('http://', 'x-safari-https://', $portalUrl);
-                return view('portal.open_in_browser', [
-                    'title' => 'Buka di Safari',
-                    'message' => 'Ketuk tombol di bawah untuk membuka portal WiFi di Safari.',
-                    'portalUrl' => $portalUrl,
-                    'safariUrl' => $safariUrl,
-                    'nasId' => $nasId,
-                    'mac' => $mac,
-                    'linkLogin' => $linkLogin,
-                    'dstUrl' => $dstUrl,
-                    'branding' => $router?->tenant?->portalConfig?->branding ?? ['color' => '#6366f1'],
-                ]);
-            }
-
-            if ($isAndroidDevice) {
-                return view('portal.open_in_browser', [
-                    'title' => 'Buka di Browser',
-                    'message' => 'Ketuk tombol di bawah untuk membuka portal WiFi di browser.',
-                    'portalUrl' => $portalUrl,
-                    'nasId' => $nasId,
-                    'mac' => $mac,
-                    'linkLogin' => $linkLogin,
-                    'dstUrl' => $dstUrl,
-                    'branding' => $router?->tenant?->portalConfig?->branding ?? ['color' => '#6366f1'],
-                ]);
-            }
-        }
-
+        // Normal flow — biometric auto-login atau login form
+        // (CNA/Safari/Chrome semua handle di sini) 
         $this->analytics->track('portal_opened', [
             'tenant_id' => $router->tenant_id,
             'router_id' => $router->id,

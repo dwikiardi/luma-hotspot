@@ -63,7 +63,7 @@
         </div>
         <h1>{{ $title }}</h1>
         <p>{{ $message }}</p>
-        <a href="{{ $safariUrl ?? $portalUrl }}" class="btn" id="openBtn">Buka Portal WiFi</a>
+        <a href="{{ $portalUrl }}" class="btn" id="openBtn" target="_blank" rel="noopener">Buka Portal WiFi</a>
         <p class="hint">Ketuk tombol di atas untuk melanjutkan</p>
     </div>
     <script>
