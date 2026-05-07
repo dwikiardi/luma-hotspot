@@ -74,7 +74,8 @@ pool = RouterOsApiPool({$escapedIp}, username="admin", password="", plaintext_lo
 api = pool.get_api()
 up = api.get_resource("/ip/hotspot/user/profile")
 for p in up.get():
-    up.call("set", {{"shared-users": "{$sharedUsers}", ".id": p[".id"]}})
+    rid = p.get(".id") or p.get("id")
+    up.call("set", {{"shared-users": "{$sharedUsers}", "keepalive-timeout": "none", "idle-timeout": "none", ".id": rid}})
 pool.disconnect()
 print("done")
 PYEOF;
