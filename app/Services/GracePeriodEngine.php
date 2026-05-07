@@ -40,81 +40,60 @@ class GracePeriodEngine
         $ip = $request->ip();
         $nasId = $router->nas_identifier;
 
-        $sessions = UserSession::where('status', 'disconnected')
-            ->where('expires_at', '>', now())
-            ->where('router_id', $router->id)
-            ->orderByDesc('disconnected_at')
-            ->get();
-
         $hasValidMac = $mac && $mac !== 'unknown';
-        $hasFingerprint = !empty($fingerprint);
+        $hasRealFp = $fingerprint && !str_starts_with($fingerprint, 'fp-Mozilla');
         $hasCookie = !empty($cookie);
-        $isCNA = str_contains($request->userAgent() ?? '', 'CaptiveNetworkSupport')
-            || str_contains($request->header('User-Agent') ?? '', 'CaptiveNetworkSupport');
 
-        // Log grace check
-        if ($isCNA || $hasFingerprint || $hasCookie || $hasValidMac) {
-            \App\Services\ActivityLogger::graceCheck(
-                $mac ?: 'unknown', $isCNA, $sessions->count(),
-                UserSession::where('status', 'active')->where('router_id', $router->id)->count()
-            );
+        // Find ANY session for any user on this router (active or grace)
+        $session = UserSession::where('router_id', $router->id)
+            ->whereIn('status', ['active', 'disconnected'])
+            ->where('expires_at', '>', now())
+            ->first();
+
+        if (! $session) {
+            \App\Services\ActivityLogger::graceRequireLogin('no sessions');
+            return GraceCheckResult::requireLogin();
         }
 
-        // === SCAN ALL SESSIONS (disconnected + active) ===
-        $allSessions = $sessions->merge(
-            UserSession::where('status', 'active')
-                ->where('router_id', $router->id)
-                ->where('expires_at', '>', now())
-                ->get()
+        \App\Services\ActivityLogger::graceCheck(
+            $mac ?: 'unknown', false,
+            UserSession::where('status', 'disconnected')->where('router_id', $router->id)->count(),
+            UserSession::where('status', 'active')->where('router_id', $router->id)->count()
         );
 
-        foreach ($allSessions as $session) {
-            // Primary: fingerprint match (HANYA real JS fingerprint, bukan UA fallback)
-            // UA fallback dimulai dengan "fp-Mozilla" — jangan di-match (tidak unique per device)
-            $isRealFp = $hasFingerprint && !str_starts_with($fingerprint, 'fp-Mozilla');
-            if ($isRealFp && $session->fingerprint_hash === $fingerprint) {
-                \App\Services\ActivityLogger::graceAutoLogin(
-                    User::find($session->user_id)?->identity_value ?? '?',
-                    $session->id, $session->mac_address, $session->ip_address ?? '?'
-                );
-                return GraceCheckResult::autoLogin($session);
-            }
-
-            // Primary: cookie match
-            if ($hasCookie && $session->cookie_token === $cookie) {
-                \App\Services\ActivityLogger::graceAutoLogin(
-                    User::find($session->user_id)?->identity_value ?? '?',
-                    $session->id, $session->mac_address, $session->ip_address ?? '?'
-                );
-                return GraceCheckResult::autoLogin($session);
-            }
+        // Primary: cookie match
+        if ($hasCookie && $session->cookie_token === $cookie) {
+            \App\Services\ActivityLogger::graceAutoLogin(
+                User::find($session->user_id)?->identity_value ?? '?',
+                $session->id, $session->mac_address, $session->ip_address ?? '?'
+            );
+            return GraceCheckResult::autoLogin($session);
         }
 
-        // Secondary: MAC + IP scoring (only if primary signals exist but didn't match above,
-        // or if at least IP is valid)
-        $hasAnySignal = $hasValidMac || ($ip && $ip !== 'unknown' && $ip !== '127.0.0.1');
-
-        if ($hasAnySignal) {
-            foreach ($allSessions as $session) {
-                $score = 0;
-
-                if ($hasValidMac && $session->mac_address === $mac) $score += 3;
-                if ($ip && $session->ip_address === $ip) $score += 2;
-                if ($ip && $session->ip_address === $ip && $session->nas_id === $nasId) $score += 1;
-
-                if ($score >= 4) { // Need MAC+IP or strong combination
-                    \App\Services\ActivityLogger::graceAutoLogin(
-                        User::find($session->user_id)?->identity_value ?? '?',
-                        $session->id, $session->mac_address, $session->ip_address ?? '?'
-                    );
-                    return GraceCheckResult::autoLogin($session);
-                }
-            }
+        // Primary: real JS fingerprint match
+        if ($hasRealFp && $session->fingerprint_hash === $fingerprint) {
+            \App\Services\ActivityLogger::graceAutoLogin(
+                User::find($session->user_id)?->identity_value ?? '?',
+                $session->id, $session->mac_address, $session->ip_address ?? '?'
+            );
+            return GraceCheckResult::autoLogin($session);
         }
 
-        // No match → require login
-        $reason = $hasFingerprint ? 'fp no match' : ($hasCookie ? 'cookie no match' : 'no signal');
-        \App\Services\ActivityLogger::graceRequireLogin($reason);
+        // Secondary: MAC + IP scoring
+        $score = 0;
+        if ($hasValidMac && $session->mac_address === $mac) $score += 3;
+        if ($ip && $session->ip_address === $ip) $score += 2;
+        if ($ip && $session->ip_address === $ip && $session->nas_id === $nasId) $score += 1;
+
+        if ($score >= 4) {
+            \App\Services\ActivityLogger::graceAutoLogin(
+                User::find($session->user_id)?->identity_value ?? '?',
+                $session->id, $session->mac_address, $session->ip_address ?? '?'
+            );
+            return GraceCheckResult::autoLogin($session);
+        }
+
+        \App\Services\ActivityLogger::graceRequireLogin('no matching signals');
         return GraceCheckResult::requireLogin();
     }
 
@@ -160,38 +139,16 @@ class GracePeriodEngine
 
         $fingerprint = $request->header('X-Fingerprint') ?? $request->input('fingerprint');
         $cookie = $request->cookie('luma_session');
-
-        // Reactivate existing session by fingerprint, cookie, or MAC
         $isRealFp = $fingerprint && !str_starts_with($fingerprint, 'fp-Mozilla');
+
+        // Find existing session for this user+router (max 1 guaranteed by unique index)
         $existing = UserSession::where('user_id', $user->id)
             ->where('router_id', $router->id)
             ->whereIn('status', ['active', 'disconnected'])
-            ->where(function ($q) use ($isRealFp, $fingerprint, $cookie, $mac) {
-                if ($isRealFp && $fingerprint) $q->orWhere('fingerprint_hash', $fingerprint);
-                if ($cookie) $q->orWhere('cookie_token', $cookie);
-                if ($mac && $mac !== 'unknown') $q->orWhere('mac_address', $mac);
-            })
-            ->orderByDesc('login_at')
             ->first();
 
-        // Fallback: no signal match → reactivate most recent session for this user
-        // (User entered room number = we KNOW it's them. Always reactivate, never duplicate.)
-        if (! $existing) {
-            $existing = UserSession::where('user_id', $user->id)
-                ->where('router_id', $router->id)
-                ->whereIn('status', ['active', 'disconnected'])
-                ->orderByDesc('login_at')
-                ->first();
-        }
-
         if ($existing) {
-            // Expire any OTHER active sessions for this user (clean duplicates)
-            UserSession::where('user_id', $user->id)
-                ->where('router_id', $router->id)
-                ->where('status', 'active')
-                ->where('id', '!=', $existing->id)
-                ->update(['status' => 'expired']);
-
+            // UPDATE existing session — NEVER change cookie_token (immutable!)
             $existing->update([
                 'status' => 'active',
                 'login_at' => now(),
@@ -200,21 +157,22 @@ class GracePeriodEngine
                 'disconnected_at' => null,
                 'ip_address' => $clientIp ?: $existing->ip_address,
                 'mac_address' => $mac !== 'unknown' ? $mac : $existing->mac_address,
+                // Only overwrite fingerprint with real JS fp
                 'fingerprint_hash' => ($isRealFp && $fingerprint) ? $fingerprint : $existing->fingerprint_hash,
-                'cookie_token' => $cookie ?: $existing->cookie_token,
+                // NEVER change cookie_token
             ]);
             $this->logDeviceFingerprint($request, $user, $device, $router);
             return $existing;
         }
 
-        // Create new session
+        // CREATE new session (first time for this user+router)
         $session = UserSession::create([
             'user_id' => $user->id,
             'device_id' => $device->id,
             'router_id' => $router->id,
             'mac_address' => $mac,
-            'fingerprint_hash' => ($fingerprint && !str_starts_with($fingerprint, 'fp-Mozilla')) ? $fingerprint : null,
-            'cookie_token' => UserSession::generateCookieToken(),
+            'fingerprint_hash' => ($isRealFp && $fingerprint) ? $fingerprint : null,
+            'cookie_token' => UserSession::generateCookieToken(), // Generate ONCE
             'ip_address' => $clientIp,
             'login_at' => now(),
             'last_seen_at' => now(),

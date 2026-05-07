@@ -200,76 +200,34 @@ Schedule::call(function () {
                 ->first();
             $mac = $rad?->callingstationid ?? 'unknown';
 
-            // Reactivate disconnected session jika user masih di MikroTik
-            // Hanya jika MAC match atau ini satu-satunya session (same user reconnect)
-            $disconnected = \App\Models\UserSession::where('user_id', $user->id)
+            // Find existing session for this user+router (active or disconnected)
+            $session = \App\Models\UserSession::where('user_id', $user->id)
                 ->where('router_id', $router->id)
-                ->where('status', 'disconnected')
-                ->where('expires_at', '>', now())
-                ->orderByDesc('login_at')
-                ->get();
-
-            $match = $disconnected->first();
-            // Prefer MAC match dulu
-            if ($mac !== 'unknown') {
-                $macMatch = $disconnected->firstWhere('mac_address', $mac);
-                if ($macMatch) $match = $macMatch;
-            }
-            // Fallback: reactivate if only 1 session (same user, different MAC)
-            $shouldReactivate = $disconnected->count() === 1;
-
-            if ($match && $shouldReactivate) {
-                $match->update([
-                    'status' => 'active',
-                    'login_at' => now(),
-                    'last_seen_at' => now(),
-                    'expires_at' => now()->addHours(4),
-                    'disconnected_at' => null,
-                    'ip_address' => $ip,
-                    'mac_address' => $mac !== 'unknown' ? $mac : $match->mac_address,
-                ]);
-                \App\Services\ActivityLogger::syncReactivate($identity, $match->id, $mac);
-                continue;
-            }
-
-            // Update or skip active session
-            $active = \App\Models\UserSession::where('user_id', $user->id)
-                ->where('router_id', $router->id)
-                ->where('status', 'active')
-                ->latest('login_at')
+                ->whereIn('status', ['active', 'disconnected'])
                 ->first();
 
-            if ($active) {
-                if ($mac !== 'unknown' && $active->mac_address !== $mac) {
-                    $oldMac = $active->mac_address;
-                    $active->update(['mac_address' => $mac, 'ip_address' => $ip, 'last_seen_at' => now()]);
-                    \App\Services\ActivityLogger::syncMacUpdated($identity, $active->id, $oldMac, $mac);
-                } else {
-                    $active->update(['ip_address' => $ip, 'last_seen_at' => now()]);
+            if ($session) {
+                // Reactivate if disconnected, otherwise just update
+                $updates = [
+                    'last_seen_at' => now(),
+                    'ip_address' => $ip,
+                ];
+                if ($session->status === 'disconnected') {
+                    $updates['status'] = 'active';
+                    $updates['login_at'] = now();
+                    $updates['expires_at'] = now()->addHours(4);
+                    $updates['disconnected_at'] = null;
                 }
-                continue;
+                if ($mac !== 'unknown' && $session->mac_address !== $mac) {
+                    $oldMac = $session->mac_address;
+                    $updates['mac_address'] = $mac;
+                    \App\Services\ActivityLogger::syncMacUpdated($identity, $session->id, $oldMac, $mac);
+                }
+                $session->update($updates);
+                \App\Services\ActivityLogger::syncReactivate($identity, $session->id, $mac);
             }
-
-            $device = \App\Models\Device::firstOrCreate(
-                ['fingerprint_hash' => 'fp-mk-'.substr(md5($mac), 0, 12)],
-                ['user_id' => $user->id]
-            );
-
-            \App\Models\UserSession::create([
-                'user_id' => $user->id,
-                'device_id' => $device->id,
-                'router_id' => $router->id,
-                'mac_address' => $mac,
-                'ip_address' => $ip,
-                'login_at' => now(),
-                'last_seen_at' => now(),
-                'expires_at' => now()->addHours(4),
-                'status' => 'active',
-                'nas_id' => $router->nas_identifier,
-                'login_method' => 'room',
-                'cookie_token' => \App\Models\UserSession::generateCookieToken(),
-                'fingerprint_hash' => 'fp-mk-'.substr(md5($mac), 0, 12),
-            ]);
+            // No else: never create new session from sync
+            // Session creation only happens via user login (createSession)
         }
     } catch (\Throwable $e) {
         \Illuminate\Support\Facades\Log::warning('MikroTik sync failed', ['error' => $e->getMessage()]);
