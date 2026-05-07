@@ -94,10 +94,12 @@ class PortalController extends Controller
             $portalUrl = url('/portal?' . $params);
 
             if ($isCNA && $isIOS) {
+                $safariUrl = str_replace('http://', 'x-safari-https://', $portalUrl);
                 return view('portal.open_in_browser', [
                     'title' => 'Buka di Safari',
                     'message' => 'Ketuk tombol di bawah untuk membuka portal WiFi di Safari.',
                     'portalUrl' => $portalUrl,
+                    'safariUrl' => $safariUrl,
                     'nasId' => $nasId,
                     'mac' => $mac,
                     'linkLogin' => $linkLogin,

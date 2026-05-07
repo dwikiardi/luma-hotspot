@@ -47,7 +47,6 @@
             font-weight: 600;
             font-size: 17px;
             box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
-            transition: transform 0.15s;
         }
         .btn:active { transform: scale(0.96); }
         .hint {
@@ -64,29 +63,18 @@
         </div>
         <h1>{{ $title }}</h1>
         <p>{{ $message }}</p>
-        <a href="{{ $portalUrl }}" class="btn" id="openBtn">Buka Portal WiFi</a>
-        <p class="hint">Portal akan terbuka otomatis</p>
+        <a href="{{ $safariUrl ?? $portalUrl }}" class="btn" id="openBtn">Buka Portal WiFi</a>
+        <p class="hint">Ketuk tombol di atas untuk melanjutkan</p>
     </div>
     <script>
         var isAndroid = /Android/i.test(navigator.userAgent);
-        var isIOS = /iPhone|iPad/i.test(navigator.userAgent);
         
         if (isAndroid) {
             var intentUrl = 'intent://103.137.140.6:8081/portal?browser=1&nas_id={{ urlencode($nasId ?? '') }}&client_mac={{ urlencode($mac ?? '') }}&link_login={{ urlencode($linkLogin ?? '') }}&dst={{ urlencode($dstUrl ?? '') }}#Intent;scheme=http;package=com.android.chrome;end';
-            setTimeout(function() {
-                window.location.href = intentUrl;
-            }, 500);
-        } else if (isIOS) {
-            // iOS CNA: harus pakai x-safari-https:// untuk buka Safari dari CNA
-            var safariUrl = 'x-safari-https://103.137.140.6:8081/portal?browser=1&nas_id={{ urlencode($nasId ?? '') }}&client_mac={{ urlencode($mac ?? '') }}&link_login={{ urlencode($linkLogin ?? '') }}&dst={{ urlencode($dstUrl ?? '') }}';
-            setTimeout(function() {
-                window.location.href = safariUrl;
-            }, 500);
-        } else {
-            setTimeout(function() {
-                window.location.href = "{{ $portalUrl }}";
-            }, 1000);
+            // Auto-redirect Android to Chrome
+            window.location.href = intentUrl;
         }
+        // iOS: no auto-redirect, user must tap the button (x-safari-https only works in <a href>)
     </script>
 </body>
 </html>
