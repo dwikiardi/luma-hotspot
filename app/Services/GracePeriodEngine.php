@@ -117,18 +117,27 @@ class GracePeriodEngine
                         );
                         return GraceCheckResult::autoLogin($macMatch);
                     }
-                    // Cek radacct: user mana yg punya MAC ini (sedang connected)
-                    $radUser = \Illuminate\Support\Facades\DB::table('radacct')
-                        ->where('callingstationid', $mac)
-                        ->whereNull('acctstoptime')
-                        ->orderByDesc('acctstarttime')
-                        ->first();
-                    if ($radUser) {
-                        $dbUser = \App\Models\User::where('identity_value', $radUser->username)->first();
-                        if ($dbUser) {
-                            $radSession = $activeSessions->firstWhere('user_id', $dbUser->id);
-                            if ($radSession) {
-                                return GraceCheckResult::autoLogin($radSession);
+                    // Cek radacct: user mana yg punya accounting open saat ini
+                    // (tidak harus MAC yg sama — CNA opens sebelum new radacct entry)
+                    $activeUsernames = \App\Models\User::whereIn('id', $activeSessions->pluck('user_id'))
+                        ->pluck('identity_value')->toArray();
+                    if (! empty($activeUsernames)) {
+                        $radUser = \Illuminate\Support\Facades\DB::table('radacct')
+                            ->whereIn('username', $activeUsernames)
+                            ->whereNull('acctstoptime')
+                            ->orderByDesc('acctstarttime')
+                            ->first();
+                        if ($radUser) {
+                            $dbUser = \App\Models\User::where('identity_value', $radUser->username)->first();
+                            if ($dbUser) {
+                                $radSession = $activeSessions->firstWhere('user_id', $dbUser->id);
+                                if ($radSession) {
+                                    \App\Services\ActivityLogger::graceAutoLogin(
+                                        $dbUser->identity_value ?? '?',
+                                        $radSession->id, $radSession->mac_address, $radSession->ip_address ?? '?'
+                                    );
+                                    return GraceCheckResult::autoLogin($radSession);
+                                }
                             }
                         }
                     }

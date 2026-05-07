@@ -95,10 +95,23 @@ class PortalController extends Controller
                 ->first();
         }
 
+        // MAC gak match? Cek via cookie (device ganti MAC tapi cookie masih ada)
         if (! $activeSession) {
             $cookie = $request->cookie('luma_session');
             $activeSession = $cookie
                 ? UserSession::where('cookie_token', $cookie)
+                    ->where('router_id', $router->id)
+                    ->where('status', 'active')
+                    ->where('expires_at', '>', now())
+                    ->first()
+                : null;
+        }
+
+        // Cookie juga gak match? Cek via fingerprint
+        if (! $activeSession) {
+            $fp = $request->header('X-Fingerprint') ?? $request->query('fingerprint');
+            $activeSession = $fp
+                ? UserSession::where('fingerprint_hash', $fp)
                     ->where('router_id', $router->id)
                     ->where('status', 'active')
                     ->where('expires_at', '>', now())
