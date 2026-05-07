@@ -74,8 +74,25 @@ class PortalController extends Controller
             ]);
         }
 
+        // CAPTIVE PORTAL → HTTP 302 redirect supaya CNA buka di Safari
+        // Tanpa browser=1, redirect ke URL yg sama + browser=1
+        $isCNA = $this->detectCNA($request->userAgent() ?? '');
+        $isIOS = $this->isIOS($request->userAgent() ?? '');
+        $isAndroid = $this->isAndroid($request->userAgent() ?? '');
+        $isBrowser = $request->query('browser') === '1';
+
+        if (($isCNA || ($isIOS && !$isBrowser)) && !$isBrowser) {
+            $params = http_build_query(array_filter([
+                'nas_id' => $nasId,
+                'client_mac' => $mac,
+                'link_login' => $linkLogin,
+                'dst' => $dstUrl,
+                'browser' => '1',
+            ]));
+            return redirect('/portal?' . $params);
+        }
+
         // Normal flow — biometric auto-login atau login form
-        // (CNA/Safari/Chrome semua handle di sini) 
         $this->analytics->track('portal_opened', [
             'tenant_id' => $router->tenant_id,
             'router_id' => $router->id,
