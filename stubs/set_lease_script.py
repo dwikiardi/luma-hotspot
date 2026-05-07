@@ -3,10 +3,11 @@ from routeros_api import RouterOsApiPool
 
 mikrotik_ip = sys.argv[1] if len(sys.argv) > 1 else "10.0.70.4"
 
-ros_script = ":if ($leaseBound = \"1\") do={\r\n" \
-    "  :local data (\"mac=\" . $leaseActiveMacAddress . \"&ip=\" . $leaseActiveAddress . \"&host=\" . $hostName . \"&server=\" . $leaseServerName)\r\n" \
-    "  /tool fetch url=\"http://103.137.140.6:8081/api/dhcp-hook\" http-method=post http-data=$data\r\n" \
-    "}\r\n"
+ros_script = ":log info (\"LumaDHCP: bound=\" . $" + "leaseBound . \" mac=\" . $" + "leaseActMAC . \" ip=\" . $" + "leaseActIP . \" host=\" . $" + "hostName)\r\n"
+ros_script += ":if ($" + "leaseBound = \"1\") do={\r\n"
+ros_script += "  :local payload (\"mac=\" . $" + "leaseActMAC . \"&ip=\" . $" + "leaseActIP . \"&host=\" . $" + "hostName . \"&server=\" . $" + "leaseServerName)\r\n"
+ros_script += "  /tool fetch url=\"http://103.137.140.6:8081/api/dhcp-hook\" http-method=post http-data=$" + "payload\r\n"
+ros_script += "}\r\n"
 
 pool = RouterOsApiPool(mikrotik_ip, username="admin", password="", plaintext_login=True, use_ssl=False)
 api = pool.get_api()
