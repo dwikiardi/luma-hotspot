@@ -76,6 +76,32 @@ PYEOF;
         $this->execPython($script);
     }
 
+    public function getActiveUsers(Router $router): array
+    {
+        $mikrotikIp = $this->getMikroTikIp($router);
+        $escapedIp = escapeshellarg($mikrotikIp);
+        $jumpHost = escapeshellarg($this->jumpHost);
+
+        $script = <<<PYEOF
+from routeros_api import RouterOsApiPool
+pool = RouterOsApiPool({$escapedIp}, username="admin", password="", plaintext_login=True, use_ssl=False)
+api = pool.get_api()
+active = api.get_resource("/ip/hotspot/active")
+for e in active.get():
+    print("=user=" + str(e.get("user","")) + "=address=" + str(e.get("address","")))
+pool.disconnect()
+PYEOF;
+
+        $output = $this->execPython($script);
+        $users = [];
+        foreach (explode("\n", $output) as $line) {
+            if (preg_match('/=user=(\S+)=address=(\S+)/', $line, $m)) {
+                $users[] = ['user' => $m[1], 'address' => $m[2]];
+            }
+        }
+        return $users;
+    }
+
     public function setHotspotConfig(Router $router, int $sessionTimeout, int $idleTimeout, int $sharedUsers): void
     {
         $mikrotikIp = $this->getMikroTikIp($router);
