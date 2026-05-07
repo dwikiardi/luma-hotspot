@@ -318,6 +318,34 @@ class GracePeriodEngine
             ->orderByDesc('disconnected_at')
             ->first();
 
+        // Fallback: same user reconnecting via different signal (CNA→Safari, MAC rotation, etc)
+        // Only when there's exactly 1 session for this user (safe for single-person rooms)
+        if (! $existing) {
+            $recentSessions = UserSession::where('user_id', $user->id)
+                ->where('router_id', $router->id)
+                ->whereIn('status', ['active', 'disconnected'])
+                ->orderByDesc('login_at')
+                ->limit(2)
+                ->get();
+
+            // Only one unique session = same person reconnecting
+            if ($recentSessions->count() === 1) {
+                $existing = $recentSessions->first();
+                if ($existing->status === 'active') {
+                    // Already active, just update
+                    $existing->update([
+                        'last_seen_at' => now(),
+                        'ip_address' => $clientIp ?: $existing->ip_address,
+                        'mac_address' => $mac !== 'unknown' ? $mac : $existing->mac_address,
+                        'fingerprint_hash' => $fingerprint ?: $existing->fingerprint_hash,
+                        'cookie_token' => $cookie ?: $existing->cookie_token,
+                    ]);
+                    \App\Services\ActivityLogger::sessionReactivate($user->identity_value, $existing->id);
+                    return $existing;
+                }
+            }
+        }
+
         if ($existing) {
             $existing->update([
                 'status' => 'active',

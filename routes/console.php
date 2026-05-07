@@ -202,24 +202,34 @@ Schedule::call(function () {
             $mac = $rad?->callingstationid ?? 'unknown';
 
             // Reactivate disconnected session jika user masih di MikroTik
+            // Hanya jika MAC match atau ini satu-satunya session (same user reconnect)
             $disconnected = \App\Models\UserSession::where('user_id', $user->id)
                 ->where('router_id', $router->id)
                 ->where('status', 'disconnected')
                 ->where('expires_at', '>', now())
                 ->orderByDesc('login_at')
-                ->first();
+                ->get();
 
-            if ($disconnected) {
-                $disconnected->update([
+            $match = $disconnected->first();
+            // Prefer MAC match dulu
+            if ($mac !== 'unknown') {
+                $macMatch = $disconnected->firstWhere('mac_address', $mac);
+                if ($macMatch) $match = $macMatch;
+            }
+            // Fallback: reactivate if only 1 session (same user, different MAC)
+            $shouldReactivate = $disconnected->count() === 1;
+
+            if ($match && $shouldReactivate) {
+                $match->update([
                     'status' => 'active',
                     'login_at' => now(),
                     'last_seen_at' => now(),
                     'expires_at' => now()->addHours(4),
                     'disconnected_at' => null,
                     'ip_address' => $ip,
-                    'mac_address' => $mac !== 'unknown' ? $mac : $disconnected->mac_address,
+                    'mac_address' => $mac !== 'unknown' ? $mac : $match->mac_address,
                 ]);
-                \App\Services\ActivityLogger::syncReactivate($identity, $disconnected->id, $mac);
+                \App\Services\ActivityLogger::syncReactivate($identity, $match->id, $mac);
                 continue;
             }
 
