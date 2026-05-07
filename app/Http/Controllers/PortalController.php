@@ -179,6 +179,8 @@ class PortalController extends Controller
 
         \App\Services\ActivityLogger::portalLoginForm('no active session & no grace match');
 
+        \App\Services\ActivityLogger::portalLoginForm('no active session & no grace match');
+
         $config = $router->tenant->portalConfig;
         $methods = $config->active_login_methods;
         $branding = $config->branding;

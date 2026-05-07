@@ -85,6 +85,40 @@ PYEOF;
     }
 
     public function isReachable(Router $router): bool
+
+    public function getHostByMac(Router $router, string $mac): ?array
+    {
+        if ($mac === 'unknown') return null;
+
+        $mikrotikIp = $this->getMikroTikIp($router);
+        $escapedIp = escapeshellarg($mikrotikIp);
+        $escapedMac = escapeshellarg(strtoupper($mac));
+
+        $script = <<<PYEOF
+from routeros_api import RouterOsApiPool
+pool = RouterOsApiPool({$escapedIp}, username="admin", password="", plaintext_login=True, use_ssl=False)
+api = pool.get_api()
+hosts = api.get_resource("/ip/hotspot/host")
+for h in hosts.get():
+    if h.get("mac-address","").upper() == {$escapedMac}:
+        print("=user=" + str(h.get("user","")))
+        print("=address=" + str(h.get("address","")))
+        print("=authorized=" + str(h.get("authorized","")))
+        print("=bypassed=" + str(h.get("bypassed","")))
+pool.disconnect()
+PYEOF;
+
+        $output = $this->execPython($script);
+        $result = [];
+        foreach (explode("\n", $output) as $line) {
+            if (preg_match('/=(\w+)=(.*)/', $line, $m)) {
+                $result[$m[1]] = $m[2];
+            }
+        }
+        return ! empty($result) ? $result : null;
+    }
+
+    public function isReachable(Router $router): bool
     {
         $mikrotikIp = $this->getMikroTikIp($router);
         $escapedIp = escapeshellarg($mikrotikIp);
