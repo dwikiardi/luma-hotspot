@@ -67,6 +67,7 @@ class TenantPanelProvider extends PanelProvider
             ])
             ->authMiddleware([
                 Authenticate::class,
+                SetTenantTimezone::class,
             ])
             ->authGuard('tenant_users');
     }

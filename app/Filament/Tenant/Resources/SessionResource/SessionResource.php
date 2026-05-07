@@ -94,7 +94,7 @@ class SessionResource extends Resource
                     }),
                 Tables\Columns\TextColumn::make('login_at')
                     ->label('Login')
-                    ->dateTime('d M H:i')
+                    ->formatStateUsing(fn ($record) => \App\Helpers\TenantTime::format($record->login_at))
                     ->sortable(),
                 Tables\Columns\TextColumn::make('duration')
                     ->label('Durasi')

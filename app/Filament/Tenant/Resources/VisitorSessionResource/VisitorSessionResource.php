@@ -104,7 +104,11 @@ class VisitorSessionResource extends Resource
                     }),
                 Tables\Columns\TextColumn::make("login_at")
                     ->label("Login")
-                    ->dateTime("d M H:i"),
+                    ->formatStateUsing(function ($record) {
+                        $tz = \App\Helpers\TenantTime::timezone();
+                        $raw = $record->getRawOriginal('login_at');
+                        return \Carbon\Carbon::parse($raw, 'UTC')->setTimezone($tz)->format('d M H:i');
+                    }),
                 Tables\Columns\TextColumn::make("duration")
                     ->label("Durasi")
                     ->state(fn (UserSession $record): string => $record->login_at

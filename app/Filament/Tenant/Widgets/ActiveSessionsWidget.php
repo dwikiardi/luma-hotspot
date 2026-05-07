@@ -50,7 +50,7 @@ class ActiveSessionsWidget extends Widget
                 'ip' => $s->ip_address ?? '-',
                 'router' => $s->router?->name ?? '-',
                 'status' => $s->status,
-                'login_at' => $s->login_at?->format('d M H:i'),
+                'login_at' => \App\Helpers\TenantTime::format($s->login_at?->toDateTimeString()),
                 'duration' => $s->login_at ? $s->login_at->diffForHumans(now(), true) : '-',
             ]);
     }

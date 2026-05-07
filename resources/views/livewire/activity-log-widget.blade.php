@@ -58,7 +58,7 @@
                                     {{ $log->event }}
                                 </span>
                                 <span class="text-xs text-gray-400 tabular-nums">
-                                    {{ \Carbon\Carbon::parse($log->created_at)->setTimezone($timezone)->format('H:i:s') }}
+                                    {{ \Carbon\Carbon::parse($log->created_at, 'UTC')->setTimezone(\App\Helpers\TenantTime::timezone())->format('H:i:s') }}
                                 </span>
                             </div>
                             <p class="text-sm text-gray-700 mt-0.5 leading-relaxed">

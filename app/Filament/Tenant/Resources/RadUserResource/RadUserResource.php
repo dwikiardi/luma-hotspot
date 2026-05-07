@@ -92,8 +92,10 @@ class RadUserResource extends Resource
                     ->label('Total Login'),
                 Tables\Columns\TextColumn::make('last_login')
                     ->label('Login Terakhir')
-                    ->formatStateUsing(fn ($record) => \App\Models\UserSession::where('user_id', $record->id)->max('login_at'))
-                    ->dateTime('d M H:i')
+                    ->formatStateUsing(function ($record) {
+                        $last = \App\Models\UserSession::where('user_id', $record->id)->max('login_at');
+                        return $last ? \App\Helpers\TenantTime::format($last) : '-';
+                    })
                     ->sortable(),
             ])
             ->filters([

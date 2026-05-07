@@ -105,12 +105,12 @@ class DeviceLogResource extends Resource
 
                 Tables\Columns\TextColumn::make('created_at')
                     ->label('First Seen')
-                    ->dateTime('d M H:i')
+                    ->formatStateUsing(fn ($record) => \App\Helpers\TenantTime::format($record->created_at))
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('updated_at')
                     ->label('Last Seen')
-                    ->dateTime('d M H:i')
+                    ->formatStateUsing(fn ($record) => \App\Helpers\TenantTime::format($record->updated_at))
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('login_count')

@@ -2,20 +2,40 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Tenant;
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class SetTenantTimezone
 {
     public function handle(Request $request, Closure $next)
     {
-        $tenant = filament()?->getTenant();
+        $timezone = null;
 
-        if ($tenant && $tenant->timezone) {
-            config(['app.timezone' => $tenant->timezone]);
-            date_default_timezone_set($tenant->timezone);
+        try {
+            $tenant = filament()?->getTenant();
+            if ($tenant?->timezone) {
+                $timezone = $tenant->timezone;
+            }
+        } catch (\Throwable) {}
+
+        if (! $timezone) {
+            $tenantId = session("current_tenant_id")
+                ?? auth("tenant_users")->user()?->tenant_id
+                ?? null;
+            if ($tenantId) {
+                $timezone = Tenant::where("id", $tenantId)->value("timezone");
+            }
         }
 
-        return $next($request);
+        if ($timezone) {
+            config(["app.timezone" => $timezone]);
+            date_default_timezone_set($timezone);
+        }
+
+        $response = $next($request);
+        $response->headers->set("X-Timezone", $timezone ?? "null");
+        return $response;
     }
 }
