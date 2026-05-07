@@ -116,7 +116,7 @@ PYEOF;
         return ! empty($result) ? $result : null;
     }
 
-    public function isReachable(Router $router): boolRouter $router): bool
+    public function isReachable(Router $router): bool
     {
         $mikrotikIp = $this->getMikroTikIp($router);
         $escapedIp = escapeshellarg($mikrotikIp);
