@@ -112,33 +112,37 @@ Schedule::call(function () {
         ->orderByDesc('radacctid')
         ->get();
 
-    // Dapatkan grace period dari portal config tenant active (default 48 jam)
-    $graceSeconds = 172800;
-    try {
-        $config = \App\Models\PortalConfig::whereHas('tenant', function ($q) {
-            $q->whereHas('routers');
-        })->where('grace_period_seconds', '>', 0)->first();
-        if ($config) {
-            $graceSeconds = $config->grace_period_seconds;
-        }
-    } catch (\Throwable) {}
-
     foreach ($stopped as $rec) {
         $user = \Illuminate\Support\Facades\DB::table('users')
             ->where('identity_value', $rec->username)
             ->first();
         if (! $user) continue;
 
-        // Hanya disconnect session yg dibuat di window RADIUS session & older than 60s
+        // Dapatkan grace period dari session's router's tenant
+        $session = \App\Models\UserSession::where('user_id', $user->id)
+            ->where('status', 'active')
+            ->where('login_at', '<', now()->subSeconds(60))
+            ->orderByDesc('login_at')
+            ->first();
+        if (! $session) continue;
+
+        $graceSeconds = 172800; // default 48h
+        if ($session->router && $session->router->tenant) {
+            $config = \App\Models\PortalConfig::where('tenant_id', $session->router->tenant_id)
+                ->where('grace_period_seconds', '>', 0)
+                ->first();
+            if ($config) $graceSeconds = $config->grace_period_seconds;
+        }
+
+        // Disconnect semua session active > 60s untuk user ini
+        $expiresAt = \Carbon\Carbon::parse($rec->acctstoptime)->addSeconds($graceSeconds);
         \App\Models\UserSession::where('user_id', $user->id)
             ->where('status', 'active')
-            ->where('login_at', '>=', $rec->acctstarttime)
-            ->where('login_at', '<', $rec->acctstoptime)
-            ->where('login_at', '<', now()->subSeconds(60)) // buffer 1 menit
+            ->where('login_at', '<', now()->subSeconds(60))
             ->update([
                 'status' => 'disconnected',
                 'disconnected_at' => $rec->acctstoptime,
-                'expires_at' => \Illuminate\Support\Facades\DB::raw("'{$rec->acctstoptime}'::timestamp + interval '{$graceSeconds} seconds'"),
+                'expires_at' => $expiresAt,
                 'mac_address' => $rec->callingstationid ?: \Illuminate\Support\Facades\DB::raw('mac_address'),
                 'ip_address' => $rec->framedipaddress 
                     ? preg_replace('/\/\d+$/', '', $rec->framedipaddress) 
@@ -151,52 +155,60 @@ Schedule::call(function () {
 Schedule::call(function () {
     try {
         $service = app(\App\Services\MikroTikApiService::class);
+        
+        // Sync per router — hanya yg punya nas_identifier yg match dgn MikroTik
+        // Karena MikroTik API return semua user hotspot, kita perlu assign ke router yg tepat
         $routers = \App\Models\Router::where('is_active', true)->get();
+        $users = $service->getActiveUsers($routers->first());
 
-        foreach ($routers as $router) {
-            $users = $service->getActiveUsers($router);
-            foreach ($users as $u) {
-                $identity = $u['user'];
-                $ip = $u['address'] ?? '0.0.0.0';
+        if (empty($users)) return;
 
-                $user = \App\Models\User::where('identity_value', $identity)->first();
-                if (! $user) continue;
+        // Ambil router pertama yg ada nas_identifier-nya (yg benar terhubung ke MikroTik)
+        $router = $routers->firstWhere('nas_identifier', 'eden-canggu') 
+               ?? $routers->firstWhere('hotspot_address', '!=', null)
+               ?? $routers->first();
 
-                // Skip if already active in DB for THIS router
-                $exists = \App\Models\UserSession::where('user_id', $user->id)
-                    ->where('router_id', $router->id)
-                    ->where('status', 'active')
-                    ->exists();
-                if ($exists) continue;
+        foreach ($users as $u) {
+            $identity = $u['user'];
+            $ip = $u['address'] ?? '0.0.0.0';
 
-                // Get MAC from radacct
-                $rad = \Illuminate\Support\Facades\DB::table('radacct')
-                    ->where('username', $identity)
-                    ->orderByDesc('radacctid')
-                    ->first();
-                $mac = $rad?->callingstationid ?? 'unknown';
+            $user = \App\Models\User::where('identity_value', $identity)->first();
+            if (! $user) continue;
 
-                $device = \App\Models\Device::firstOrCreate(
-                    ['fingerprint_hash' => 'fp-mk-'.substr(md5($mac), 0, 12)],
-                    ['user_id' => $user->id]
-                );
+            // Skip if already active in DB for this router
+            $exists = \App\Models\UserSession::where('user_id', $user->id)
+                ->where('router_id', $router->id)
+                ->where('status', 'active')
+                ->exists();
+            if ($exists) continue;
 
-                \App\Models\UserSession::create([
-                    'user_id' => $user->id,
-                    'device_id' => $device->id,
-                    'router_id' => $router->id,
-                    'mac_address' => $mac,
-                    'ip_address' => $ip,
-                    'login_at' => now(),
-                    'last_seen_at' => now(),
-                    'expires_at' => now()->addHours(4),
-                    'status' => 'active',
-                    'nas_id' => $router->nas_identifier,
-                    'login_method' => 'room',
-                    'cookie_token' => \App\Models\UserSession::generateCookieToken(),
-                    'fingerprint_hash' => 'fp-mk-'.substr(md5($mac), 0, 12),
-                ]);
-            }
+            // Get MAC from radacct
+            $rad = \Illuminate\Support\Facades\DB::table('radacct')
+                ->where('username', $identity)
+                ->orderByDesc('radacctid')
+                ->first();
+            $mac = $rad?->callingstationid ?? 'unknown';
+
+            $device = \App\Models\Device::firstOrCreate(
+                ['fingerprint_hash' => 'fp-mk-'.substr(md5($mac), 0, 12)],
+                ['user_id' => $user->id]
+            );
+
+            \App\Models\UserSession::create([
+                'user_id' => $user->id,
+                'device_id' => $device->id,
+                'router_id' => $router->id,
+                'mac_address' => $mac,
+                'ip_address' => $ip,
+                'login_at' => now(),
+                'last_seen_at' => now(),
+                'expires_at' => now()->addHours(4),
+                'status' => 'active',
+                'nas_id' => $router->nas_identifier,
+                'login_method' => 'room',
+                'cookie_token' => \App\Models\UserSession::generateCookieToken(),
+                'fingerprint_hash' => 'fp-mk-'.substr(md5($mac), 0, 12),
+            ]);
         }
     } catch (\Throwable $e) {
         \Illuminate\Support\Facades\Log::warning('MikroTik sync failed', ['error' => $e->getMessage()]);
