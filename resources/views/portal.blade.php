@@ -296,7 +296,7 @@
                             <label class="form-label">{{ $customLoginLabel ?? 'Nomor Kamar' }}</label>
                             <input type="text" class="form-input" placeholder="{{ $customLoginPlaceholder ?? 'Contoh: 101' }}" id="roomInput">
                         </div>
-                        <button onclick="loginRoom()" class="form-submit" id="submitBtn">
+                        <button onclick="loginRoom()" class="form-submit" id="roomSubmitBtn">
                             <span class="btn-text">Masuk</span>
                             <span class="spinner" style="display:none"></span>
                         </button>
@@ -376,9 +376,12 @@
         }
 
         function loginRoom() {
+            if (loading) return;
             var input = document.getElementById("roomInput");
             if (!input || !input.value) { showError("Masukkan nomor kamar"); return; }
             loading = true;
+            var btn = document.getElementById("roomSubmitBtn");
+            if (btn) { btn.disabled = true; btn.querySelector('.btn-text').style.opacity = '0.5'; btn.querySelector('.spinner').style.display = 'inline-block'; }
             showError("");
             fetch("/auth/room", {
                 method: "POST",
@@ -393,7 +396,6 @@
             })
             .then(function(r) { return r.json(); })
             .then(function(data) {
-                loading = false;
                 if (data.redirect) {
                     var overlay = document.getElementById("successOverlay");
                     if (overlay) overlay.style.display = "flex";
@@ -402,9 +404,11 @@
                     window.location.href = "https://www.google.com";
                 } else {
                     showError(data.message || "Login gagal");
+                    loading = false;
+                    if (btn) { btn.disabled = false; btn.querySelector('.btn-text').style.opacity = ''; btn.querySelector('.spinner').style.display = 'none'; }
                 }
             })
-            .catch(function() { showError("Terjadi kesalahan"); loading = false; });
+            .catch(function() { showError("Terjadi kesalahan"); loading = false; if (btn) { btn.disabled = false; btn.querySelector('.btn-text').style.opacity = ''; btn.querySelector('.spinner').style.display = 'none'; } });
         }
 
         function requestOtp() {}
