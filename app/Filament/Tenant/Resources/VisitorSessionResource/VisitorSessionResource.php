@@ -142,24 +142,28 @@ class VisitorSessionResource extends Resource
                     ->color('danger')
                     ->visible(fn ($record) => $record->status === 'active')
                     ->action(function ($record) {
-                        $username = $record->user?->identity_value;
                         $router = $record->router;
-                        if ($username && $router) {
-                            // Multi-device: cuma disconnect device dgn MAC ini dari MikroTik
+                        if ($router) {
+                            // Disconnect spesifik MAC ini dari MikroTik (active + cookie)
+                            $svc = app(\App\Services\MikroTikApiService::class);
+                            $svc->disconnectByMac($router, $record->mac_address);
+
+                            // Kalau ini device terakhir, disconnect juga by username (cleanup total)
                             $otherActive = UserSession::where('user_id', $record->user_id)
                                 ->where('router_id', $router->id)
                                 ->where('status', 'active')
                                 ->where('id', '!=', $record->id)
                                 ->count();
-                            if ($otherActive === 0) {
-                                app(\App\Services\MikroTikApiService::class)->disconnectUser($username, $router);
+                            if ($otherActive === 0 && $record->user?->identity_value) {
+                                $svc->disconnectUser($record->user->identity_value, $router);
                             }
-                            $record->update(['status' => 'disconnected', 'disconnected_at' => now()]);
-                            \Filament\Notifications\Notification::make()
-                                ->success()
-                                ->title("User $username diputuskan dari hotspot")
-                                ->send();
                         }
+                        $record->update(['status' => 'disconnected', 'disconnected_at' => now()]);
+                        \Filament\Notifications\Notification::make()
+                            ->success()
+                            ->title("User diputuskan dari hotspot")
+                            ->body("MAC {$record->mac_address} dihapus dari MikroTik active & cookie")
+                            ->send();
                     })
                     ->requiresConfirmation()
                     ->modalHeading('Putuskan user ini?')

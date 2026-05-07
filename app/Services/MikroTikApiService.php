@@ -19,7 +19,6 @@ class MikroTikApiService
         $mikrotikIp = $this->getMikroTikIp($router);
         $escapedUsername = escapeshellarg($username);
         $escapedIp = escapeshellarg($mikrotikIp);
-        $jumpHost = escapeshellarg($this->jumpHost);
 
         $script = <<<PYEOF
 from routeros_api import RouterOsApiPool
@@ -37,30 +36,44 @@ PYEOF;
         $this->execPython($script);
     }
 
-    public function getActiveUsers(Router $router): array
+    /**
+     * Disconnect spesifik device dari MikroTik by MAC.
+     * Hapus dari /ip/hotspot/active DAN /ip/hotspot/cookie untuk MAC ini.
+     */
+    public function disconnectByMac(Router $router, string $mac): void
     {
+        if ($mac === 'unknown') return;
+
         $mikrotikIp = $this->getMikroTikIp($router);
         $escapedIp = escapeshellarg($mikrotikIp);
-        $jumpHost = escapeshellarg($this->jumpHost);
+        $escapedMac = escapeshellarg(strtoupper($mac));
 
         $script = <<<PYEOF
 from routeros_api import RouterOsApiPool
 pool = RouterOsApiPool({$escapedIp}, username="admin", password="", plaintext_login=True, use_ssl=False)
 api = pool.get_api()
+
+# Hapus dari hotspot active by MAC
 active = api.get_resource("/ip/hotspot/active")
 for e in active.get():
-    print("=user=" + str(e.get("user","")) + "=address=" + str(e.get("address","")))
+    if e.get("mac-address","").upper() == {$escapedMac}:
+        rid = e.get(".id") or e.get("id")
+        active.call("remove", {{".id": rid}})
+        print("removed-active")
+
+# Hapus cookie untuk MAC ini
+ck = api.get_resource("/ip/hotspot/cookie")
+for c in ck.get():
+    if c.get("mac-address","").upper() == {$escapedMac}:
+        rid = c.get(".id") or c.get("id")
+        ck.call("remove", {{".id": rid}})
+        print("removed-cookie")
+
 pool.disconnect()
+print("done")
 PYEOF;
 
-        $output = $this->execPython($script);
-        $users = [];
-        foreach (explode("\n", $output) as $line) {
-            if (preg_match('/=user=(\S+)=address=(\S+)/', $line, $m)) {
-                $users[] = ['user' => $m[1], 'address' => $m[2]];
-            }
-        }
-        return $users;
+        $this->execPython($script);
     }
 
     public function setHotspotConfig(Router $router, int $sessionTimeout, int $idleTimeout, int $sharedUsers): void
