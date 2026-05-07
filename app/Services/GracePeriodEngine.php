@@ -98,9 +98,10 @@ class GracePeriodEngine
             }
         }
 
-        // Active session fallback: kalau gak ada grace session & gak ada signal,
+        // Active session fallback: kalau gak ada grace session & gak ada fingerprint,
         // cek active sessions via user_id uniqueness + radacct + MAC
-        if (! $hasFingerprint && ! $hasCookie && $sessions->isEmpty()) {
+        // (Stale cookie gak dianggap — cookie mungkin dari session lama yg udah expired)
+        if (! $hasFingerprint && $sessions->isEmpty()) {
             $activeSessions = UserSession::where('status', 'active')
                 ->where('router_id', $router->id)
                 ->where('expires_at', '>', now())
@@ -196,11 +197,12 @@ class GracePeriodEngine
                 }
             }
 
-            // Threshold: fingerprint atau cookie cukup untuk auto-login
+            // Threshold: fingerprint/cookie hanya menurunkan threshold jika match
             $threshold = 3;
-            if ($hasFingerprint || $hasCookie) {
+            if (($hasFingerprint && $session->fingerprint_hash === $fingerprint)
+                || ($hasCookie && $session->cookie_token === $cookie)) {
                 $threshold = 1;
-            } elseif (!$hasValidMac) {
+            } elseif (! $hasValidMac) {
                 $threshold = 2;
             }
 
@@ -242,9 +244,10 @@ class GracePeriodEngine
                 }
 
                 $threshold = 3;
-                if ($hasFingerprint || $hasCookie) {
+                if (($hasFingerprint && $session->fingerprint_hash === $fingerprint)
+                    || ($hasCookie && $session->cookie_token === $cookie)) {
                     $threshold = 1;
-                } elseif (!$hasValidMac) {
+                } elseif (! $hasValidMac) {
                     $threshold = 2;
                 }
 
