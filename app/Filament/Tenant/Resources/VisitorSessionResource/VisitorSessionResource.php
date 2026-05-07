@@ -141,7 +141,15 @@ class VisitorSessionResource extends Resource
                         $username = $record->user?->identity_value;
                         $router = $record->router;
                         if ($username && $router) {
-                            app(\App\Services\MikroTikApiService::class)->disconnectUser($username, $router);
+                            // Multi-device: cuma disconnect device dgn MAC ini dari MikroTik
+                            $otherActive = UserSession::where('user_id', $record->user_id)
+                                ->where('router_id', $router->id)
+                                ->where('status', 'active')
+                                ->where('id', '!=', $record->id)
+                                ->count();
+                            if ($otherActive === 0) {
+                                app(\App\Services\MikroTikApiService::class)->disconnectUser($username, $router);
+                            }
                             $record->update(['status' => 'disconnected', 'disconnected_at' => now()]);
                             \Filament\Notifications\Notification::make()
                                 ->success()
@@ -159,12 +167,20 @@ class VisitorSessionResource extends Resource
                     ->modalDescription('Sesi akan dihapus permanen dari database.')
                     ->successNotificationTitle('Sesi berhasil dihapus')
                     ->before(function ($record) {
-                        try {
-                            app(\App\Services\MikroTikApiService::class)->disconnectUser(
-                                $record->user->identity_value,
-                                $record->router
-                            );
-                        } catch (\Throwable) {}
+                        // Multi-device: hanya disconnect MikroTik kalau ini device terakhir
+                        $otherActive = \App\Models\UserSession::where('user_id', $record->user_id)
+                            ->where('router_id', $record->router_id)
+                            ->where('status', 'active')
+                            ->where('id', '!=', $record->id)
+                            ->count();
+                        if ($otherActive === 0) {
+                            try {
+                                app(\App\Services\MikroTikApiService::class)->disconnectUser(
+                                    $record->user->identity_value,
+                                    $record->router
+                                );
+                            } catch (\Throwable) {}
+                        }
                     }),
             ])
             ->bulkActions([

@@ -225,11 +225,18 @@ class PortalController extends Controller
 
         \App\Services\ActivityLogger::portalSilentLogin($username, $session->mac_address, $clientIp ?? 'unknown');
 
-        // Disconnect old session on MikroTik to prevent "already active" conflict
-        try {
-            app(\App\Services\MikroTikApiService::class)->disconnectUser($username, $router);
-        } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::warning('MikroTik pre-disconnect failed', ['error' => $e->getMessage()]);
+        // Hanya disconnect MikroTik kalau ini satu-satunya device (gak ganggu device lain sharing room)
+        $otherActiveDevices = UserSession::where('user_id', $user->id)
+            ->where('router_id', $router->id)
+            ->where('status', 'active')
+            ->where('id', '!=', $session->id)
+            ->count();
+        if ($otherActiveDevices === 0) {
+            try {
+                app(\App\Services\MikroTikApiService::class)->disconnectUser($username, $router);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('MikroTik pre-disconnect failed', ['error' => $e->getMessage()]);
+            }
         }
 
         $redirectUrl = $this->buildMikroTikLoginUrl($router, $username, $password, $linkLogin, $dstUrl);

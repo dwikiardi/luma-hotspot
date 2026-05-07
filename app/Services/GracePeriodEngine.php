@@ -63,8 +63,30 @@ class GracePeriodEngine
         }
 
         // iPhone CNA: tidak ada fingerprint/cookie → auto-login session
-        // Aman kalau semua disconnected session milik user yg sama (group tamu 1 kamar)
         if ($isCNA && !$hasFingerprint && !$hasCookie && $sessions->isNotEmpty()) {
+            // Multi-device: match by MAC dulu sebelum uniqueness check
+            if ($hasValidMac) {
+                $macMatch = $sessions->firstWhere('mac_address', $mac);
+                if ($macMatch) {
+                    \App\Services\ActivityLogger::graceAutoLogin(
+                        User::find($macMatch->user_id)?->identity_value ?? '?',
+                        $macMatch->id, $mac, $macMatch->ip_address ?? '?'
+                    );
+                    return GraceCheckResult::autoLogin($macMatch);
+                }
+            }
+            // Match by IP
+            if ($ip) {
+                $ipMatch = $sessions->firstWhere('ip_address', $ip);
+                if ($ipMatch) {
+                    \App\Services\ActivityLogger::graceAutoLogin(
+                        User::find($ipMatch->user_id)?->identity_value ?? '?',
+                        $ipMatch->id, $ipMatch->mac_address, $ip
+                    );
+                    return GraceCheckResult::autoLogin($ipMatch);
+                }
+            }
+            // Fallback: semua disconnected session milik user yg sama
             $uniqueUsers = $sessions->pluck('user_id')->unique();
             if ($uniqueUsers->count() === 1) {
                 $s = $sessions->first();
@@ -313,26 +335,8 @@ class GracePeriodEngine
             return $existing;
         }
 
-        // Disconnect session active sebelumnya untuk user ini
-        UserSession::where('user_id', $user->id)
-            ->where('router_id', $router->id)
-            ->where('status', 'active')
-            ->update(['status' => 'disconnected', 'disconnected_at' => now()]);
-
-        // Expire session disconnected lama (keep only 1 most recent)
-        $keepDisconnected = UserSession::where('user_id', $user->id)
-            ->where('router_id', $router->id)
-            ->where('status', 'disconnected')
-            ->orderByDesc('disconnected_at')
-            ->first();
-
-        if ($keepDisconnected) {
-            UserSession::where('user_id', $user->id)
-                ->where('router_id', $router->id)
-                ->where('status', 'disconnected')
-                ->where('id', '!=', $keepDisconnected->id)
-                ->update(['status' => 'expired']);
-        }
+        // Multi-device: jangan disconnect active session lain
+        // Biarkan beberapa device sharing room yg sama co-exist
 
         $session = UserSession::create([
             'user_id' => $user->id,

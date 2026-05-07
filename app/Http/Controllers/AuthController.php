@@ -251,16 +251,6 @@ class AuthController extends Controller
 
         $session = $this->graceEngine->createSession($request, $user, $device, $router);
 
-        // Disconnect session lama di MikroTik via SSH
-        try {
-            app(\App\Services\MikroTikApiService::class)->disconnectUser(
-                $user->identity_value,
-                $router
-            );
-        } catch (\Throwable $e) {
-            Log::warning('MikroTik disconnect failed', ['error' => $e->getMessage()]);
-        }
-
         $this->analytics->track('login_success', [
             'tenant_id' => $router->tenant_id,
             'router_id' => $router->id,

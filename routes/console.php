@@ -138,13 +138,14 @@ Schedule::call(function () {
             if ($config) $graceSeconds = $config->grace_period_seconds;
         }
 
-        // Disconnect semua session active > 60s untuk user ini,
-        // hanya yg login sebelum disconnect (login_at < acctstoptime)
+        // Disconnect session active > 60s untuk user ini, hanya yg login sebelum disconnect
+        // Multi-device: filter by callingstationid (MAC) agar cuma device yg disconnected yg kena
         $expiresAt = \Carbon\Carbon::parse($rec->acctstoptime)->addSeconds($graceSeconds);
         $updated = \App\Models\UserSession::where('user_id', $user->id)
             ->where('status', 'active')
             ->where('login_at', '<', now()->subSeconds(60))
             ->where('login_at', '<', $rec->acctstoptime)
+            ->where('mac_address', $rec->callingstationid)
             ->update([
                 'status' => 'disconnected',
                 'disconnected_at' => $rec->acctstoptime,
@@ -237,12 +238,6 @@ Schedule::call(function () {
                 } else {
                     $active->update(['ip_address' => $ip, 'last_seen_at' => now()]);
                 }
-                // Expire any duplicate active sessions (safety)
-                \App\Models\UserSession::where('user_id', $user->id)
-                    ->where('router_id', $router->id)
-                    ->where('status', 'active')
-                    ->where('id', '!=', $active->id)
-                    ->update(['status' => 'expired']);
                 continue;
             }
 
