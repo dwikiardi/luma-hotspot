@@ -204,7 +204,12 @@ class PortalController extends Controller
 
         $session->update([
             'status' => 'active',
+            'login_at' => now(),
             'last_seen_at' => now(),
+            'expires_at' => now()->addSeconds(
+                $router->tenant->portalConfig->session_timeout ?? 14400
+            ),
+            'disconnected_at' => null,
         ]);
 
         $username = $user->identity_value;

@@ -170,6 +170,39 @@ class GracePeriodEngine
             ?? $request->ip();
         $clientIp = !empty($clientIp) ? $clientIp : null;
 
+        // Reactivate existing grace session (same device: fingerprint, MAC, cookie, atau user)
+        $fingerprint = $request->header('X-Fingerprint') ?? $request->input('fingerprint');
+        $cookie = $request->cookie('luma_session');
+
+        $existing = UserSession::where('user_id', $user->id)
+            ->where('router_id', $router->id)
+            ->where('status', 'disconnected')
+            ->where('expires_at', '>', now())
+            ->where(function ($q) use ($mac, $fingerprint, $cookie) {
+                if ($fingerprint) $q->orWhere('fingerprint_hash', $fingerprint);
+                if ($cookie) $q->orWhere('cookie_token', $cookie);
+                if ($mac && $mac !== 'unknown') $q->orWhere('mac_address', $mac);
+            })
+            ->orderByDesc('disconnected_at')
+            ->first();
+
+        if ($existing) {
+            $existing->update([
+                'status' => 'active',
+                'login_at' => now(),
+                'last_seen_at' => now(),
+                'expires_at' => now()->addSeconds($sessionTimeout),
+                'disconnected_at' => null,
+                'ip_address' => $clientIp ?: $existing->ip_address,
+                'mac_address' => $mac !== 'unknown' ? $mac : $existing->mac_address,
+                'fingerprint_hash' => $fingerprint ?: $existing->fingerprint_hash,
+                'cookie_token' => $cookie ?: $existing->cookie_token,
+            ]);
+
+            $this->logDeviceFingerprint($request, $user, $device, $router);
+            return $existing;
+        }
+
         // Disconnect session active sebelumnya untuk user ini
         UserSession::where('user_id', $user->id)
             ->where('router_id', $router->id)
