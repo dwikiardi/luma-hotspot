@@ -134,11 +134,13 @@ Schedule::call(function () {
             if ($config) $graceSeconds = $config->grace_period_seconds;
         }
 
-        // Disconnect semua session active > 60s untuk user ini
+        // Disconnect semua session active > 60s untuk user ini,
+        // hanya yg login sebelum disconnect (login_at < acctstoptime)
         $expiresAt = \Carbon\Carbon::parse($rec->acctstoptime)->addSeconds($graceSeconds);
         \App\Models\UserSession::where('user_id', $user->id)
             ->where('status', 'active')
             ->where('login_at', '<', now()->subSeconds(60))
+            ->where('login_at', '<', $rec->acctstoptime)
             ->update([
                 'status' => 'disconnected',
                 'disconnected_at' => $rec->acctstoptime,
@@ -174,6 +176,26 @@ Schedule::call(function () {
 
             $user = \App\Models\User::where('identity_value', $identity)->first();
             if (! $user) continue;
+
+            // Reactivate disconnected session jika user masih di MikroTik
+            $disconnected = \App\Models\UserSession::where('user_id', $user->id)
+                ->where('router_id', $router->id)
+                ->where('status', 'disconnected')
+                ->where('expires_at', '>', now())
+                ->orderByDesc('login_at')
+                ->first();
+
+            if ($disconnected) {
+                $disconnected->update([
+                    'status' => 'active',
+                    'login_at' => now(),
+                    'last_seen_at' => now(),
+                    'expires_at' => now()->addHours(4),
+                    'disconnected_at' => null,
+                    'ip_address' => $ip,
+                ]);
+                continue;
+            }
 
             // Skip if already active in DB for this router
             $exists = \App\Models\UserSession::where('user_id', $user->id)

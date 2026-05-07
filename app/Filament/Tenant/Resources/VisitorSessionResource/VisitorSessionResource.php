@@ -154,15 +154,36 @@ class VisitorSessionResource extends Resource
                     ->modalDescription('User akan diputuskan dari hotspot MikroTik.'),
                 Tables\Actions\DeleteAction::make()
                     ->label('Hapus')
+                    ->visible(fn ($record) => $record->status === 'disconnected')
                     ->modalHeading('Hapus sesi ini?')
                     ->modalDescription('Sesi akan dihapus permanen dari database.')
-                    ->successNotificationTitle('Sesi berhasil dihapus'),
+                    ->successNotificationTitle('Sesi berhasil dihapus')
+                    ->before(function ($record) {
+                        try {
+                            app(\App\Services\MikroTikApiService::class)->disconnectUser(
+                                $record->user->identity_value,
+                                $record->router
+                            );
+                        } catch (\Throwable) {}
+                    }),
             ])
             ->bulkActions([
                 Tables\Actions\DeleteBulkAction::make()
                     ->label('Hapus yang dipilih')
                     ->modalHeading('Hapus sesi yang dipilih?')
-                    ->modalDescription('Semua sesi yang dipilih akan dihapus permanen.'),
+                    ->modalDescription('Semua sesi yang dipilih akan dihapus permanen.')
+                    ->before(function (\Illuminate\Support\Collection $records) {
+                        foreach ($records as $record) {
+                            if ($record->user && $record->router) {
+                                try {
+                                    app(\App\Services\MikroTikApiService::class)->disconnectUser(
+                                        $record->user->identity_value,
+                                        $record->router
+                                    );
+                                } catch (\Throwable) {}
+                            }
+                        }
+                    }),
             ]);
     }
 

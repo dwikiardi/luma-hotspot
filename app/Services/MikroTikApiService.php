@@ -28,7 +28,8 @@ api = pool.get_api()
 active = api.get_resource("/ip/hotspot/active")
 for e in active.get():
     if e.get("user") == {$escapedUsername}:
-        active.call("remove", {{".id": e[".id"]}})
+        rid = e.get(".id") or e.get("id")
+        active.call("remove", {{".id": rid}})
 pool.disconnect()
 print("done")
 PYEOF;
