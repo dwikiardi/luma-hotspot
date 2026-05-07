@@ -235,7 +235,29 @@ Schedule::call(function () {
             }
             // No else: never create new session from sync
             // Session creation only happens via user login (createSession)
-        }
+            // EXCEPT: if user is on MikroTik and has no sessions at all → create one
+            if (! $session) {
+                $userSessions = \App\Models\UserSession::where('user_id', $user->id)
+                    ->where('router_id', $router->id)
+                    ->count();
+                if ($userSessions === 0) {
+                    \App\Models\UserSession::create([
+                        'user_id' => $user->id,
+                        'router_id' => $router->id,
+                        'mac_address' => $mac !== 'unknown' ? $mac : null,
+                        'ip_address' => $ip,
+                        'login_at' => now(),
+                        'last_seen_at' => now(),
+                        'expires_at' => now()->addHours(24),
+                        'status' => 'active',
+                        'nas_id' => $router->nas_identifier,
+                        'login_method' => 'room',
+                        'cookie_token' => \App\Models\UserSession::generateCookieToken(),
+                        'fingerprint_hash' => null,
+                    ]);
+                    \App\Services\ActivityLogger::syncSessionCreated($identity, $user->id, $mac);
+                }
+            }
     } catch (\Throwable $e) {
         \Illuminate\Support\Facades\Log::warning('MikroTik sync failed', ['error' => $e->getMessage()]);
     }
