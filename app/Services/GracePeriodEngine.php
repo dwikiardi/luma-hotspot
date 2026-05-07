@@ -197,34 +197,55 @@ class GracePeriodEngine
         try {
             $fp = $request->header('X-Fingerprint') ?? $request->input('fingerprint') ?? ('fp-' . substr(md5($request->userAgent()), 0, 16));
 
+            // Parse full FingerprintJS components data
+            $fpData = [];
+            $fpDataRaw = $request->header('X-Fingerprint-Data');
+            if ($fpDataRaw) {
+                $fpData = json_decode($fpDataRaw, true) ?? [];
+            }
+
             $existing = \App\Models\DeviceFingerprint::where('fingerprint_hash', $fp)->first();
+
+            $fields = array_filter([
+                'visitor_id' => $fpData['visitorId'] ?? null,
+                'canvas_hash' => $fpData['canvas']?->value ?? null,
+                'webgl_hash' => $fpData['webgl']?->value ?? null,
+                'webgl_vendor' => $fpData['webglVendorAndRenderer']?->vendor ?? null,
+                'webgl_renderer' => $fpData['webglVendorAndRenderer']?->renderer ?? null,
+                'fonts_hash' => $fpData['fonts']?->value ?? null,
+                'audio_hash' => $fpData['audio']?->value ?? null,
+                'screen_resolution' => isset($fpData['screenResolution']) ? json_encode($fpData['screenResolution']) : null,
+                'color_depth' => $fpData['colorDepth']?->value ?? null,
+                'device_memory' => $fpData['deviceMemory']?->value ?? null,
+                'hardware_concurrency' => $fpData['hardwareConcurrency']?->value ?? null,
+                'timezone' => $fpData['timezone']?->value ?? null,
+                'languages' => isset($fpData['languages']) ? json_encode($fpData['languages']) : null,
+                'touch_support' => isset($fpData['touchSupport']) ? ($fpData['touchSupport']?->value ?? null) : null,
+                'platform' => $fpData['platform']?->value ?? null,
+                'os_name' => $fpData['osCpu']?->value ?? null,
+                'browser_name' => $fpData['vendor']?->value ?? null,
+                'user_agent' => $request->userAgent(),
+                'ip_address' => $request->header('X-Forwarded-For') ?? $request->ip(),
+                'nas_id' => $router->nas_identifier,
+                'mac' => $request->query('client_mac') ?? $request->input('client_mac'),
+            ], fn ($v) => $v !== null);
 
             if ($existing) {
                 $matches = $existing->match_count + 1;
                 $score = min(95, 50 + ($matches * 15));
-                $existing->update([
-                    'trust_score' => $score,
-                    'confidence' => $matches >= 3 ? 'high' : ($matches >= 2 ? 'medium' : 'low'),
-                    'match_count' => $matches,
-                    'is_known_device' => $matches >= 2,
-                    'user_id' => $user->id,
-                    'ip_address' => $request->header('X-Forwarded-For') ?? $request->ip(),
-                    'nas_id' => $router->nas_identifier,
-                    'user_agent' => $request->userAgent(),
-                    'mac' => $request->query('client_mac') ?? $request->input('client_mac'),
-                ]);
+                $fields['trust_score'] = $score;
+                $fields['confidence'] = $matches >= 3 ? 'high' : ($matches >= 2 ? 'medium' : 'low');
+                $fields['match_count'] = $matches;
+                $fields['is_known_device'] = $matches >= 2;
+                $fields['user_id'] = $user->id;
+                $existing->update($fields);
             } else {
-                \App\Models\DeviceFingerprint::create([
-                    'fingerprint_hash' => $fp,
-                    'user_id' => $user->id,
-                    'device_id' => $device->id,
-                    'ip_address' => $request->header('X-Forwarded-For') ?? $request->ip(),
-                    'nas_id' => $router->nas_identifier,
-                    'user_agent' => $request->userAgent(),
-                    'mac' => $request->query('client_mac') ?? $request->input('client_mac'),
-                    'trust_score' => 50,
-                    'confidence' => 'low',
-                ]);
+                $fields['user_id'] = $user->id;
+                $fields['device_id'] = $device->id;
+                $fields['trust_score'] = 50;
+                $fields['confidence'] = 'low';
+                $fields['fingerprint_hash'] = $fp;
+                \App\Models\DeviceFingerprint::create($fields);
             }
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::warning('DeviceFingerprint log failed', ['error' => $e->getMessage()]);

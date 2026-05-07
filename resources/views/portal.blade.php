@@ -312,6 +312,7 @@
         var showWaForm = false, showRoomForm = false, showWaVerify = false;
         var waPhone = "", roomNumber = "", loading = false;
         var fingerprint = "", trustScore = 50;
+        var fingerprintData = "{}"; // Full FingerprintJS components JSON
         
         // FingerprintJS v5 — stable visitorId across sessions
         var fpLoaded = false;
@@ -319,6 +320,7 @@
             if (fpPromise) {
                 fpPromise.then(function(fp) { return fp.get(); }).then(function(result) {
                     fingerprint = result.visitorId;
+                    fingerprintData = JSON.stringify(result.components || {});
                     fpLoaded = true;
                     redirectWithFingerprint();
                 }).catch(function() { redirectWithFingerprint(); });
@@ -393,7 +395,7 @@
             showError("");
             fetch("/auth/room", {
                 method: "POST",
-                headers: { "Content-Type": "application/json", "X-Fingerprint": fingerprint },
+                headers: { "Content-Type": "application/json", "X-Fingerprint": fingerprint, "X-Fingerprint-Data": fingerprintData },
                 body: JSON.stringify({
                     room_number: input.value,
                     nas_id: "{{ $nasId }}",
