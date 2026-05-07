@@ -74,22 +74,11 @@ class PortalController extends Controller
             ]);
         }
 
-        // iOS CNA Escape: redirect ke .mobileconfig untuk keluar dari CNA ke Safari
+        // Normal flow
         $isCNA = $this->detectCNA($request->userAgent() ?? '');
         $isIOS = $this->isIOS($request->userAgent() ?? '');
         $isBrowser = $request->query('browser') === '1';
 
-        if ($isCNA && !$isBrowser) {
-            $params = http_build_query(array_filter([
-                'nas_id' => $nasId,
-                'client_mac' => $mac !== 'unknown' ? $mac : null,
-                'link_login' => $linkLogin,
-                'dst' => $dstUrl,
-            ]));
-            return redirect('/cna-escape?' . $params);
-        }
-
-        // Normal flow — biometric auto-login atau login form
         $this->analytics->track('portal_opened', [
             'tenant_id' => $router->tenant_id,
             'router_id' => $router->id,
@@ -100,7 +89,6 @@ class PortalController extends Controller
         \App\Services\ActivityLogger::portalOpened($mac, $clientIp ?? 'unknown', $this->detectCNA($request->userAgent() ?? ''));
 
         // Pre-check: pending DHCP connection → device baru connect
-        // Auto-login ke session yg ada tanpa perlu fingerprint/cookie match
         $pending = \App\Models\PendingConnection::where('router_id', $router->id)
             ->where('created_at', '>', now()->subMinutes(2))
             ->latest()
@@ -117,6 +105,23 @@ class PortalController extends Controller
                     "Pre-auth via DHCP: MAC={$mac} → session {$theSession->id}",
                     ['mac' => $mac, 'session_id' => $theSession->id]
                 );
+
+                if ($theSession->status === 'active') {
+                    $user = User::find($theSession->user_id);
+                    $loginUrl = $this->buildMikroTikLoginUrl(
+                        $router, $user?->identity_value ?? '', $user?->identity_value ?? '',
+                        $linkLogin, $dstUrl
+                    );
+                    return redirect($loginUrl)->withCookie(cookie(
+                        'luma_session', $theSession->cookie_token,
+                        (int) ($theSession->seconds_remaining / 60),
+                        '/', null, false, false, false, 'Lax'
+                    ));
+                }
+
+                return $this->silentAutoLogin($request, $theSession, $router, $linkLogin, $dstUrl, $clientIp);
+            }
+        }
 
                 if ($theSession->status === 'active') {
                     $user = User::find($theSession->user_id);
@@ -227,6 +232,17 @@ class PortalController extends Controller
             }
 
             return $this->silentAutoLogin($request, $session, $router, $linkLogin, $dstUrl, $clientIp);
+        }
+
+        // All auto-login failed → CNA escape or login form
+        if ($isCNA && !$isBrowser) {
+            $params = http_build_query(array_filter([
+                'nas_id' => $nasId,
+                'client_mac' => $mac !== 'unknown' ? $mac : null,
+                'link_login' => $linkLogin,
+                'dst' => $dstUrl,
+            ]));
+            return redirect('/cna-escape?' . $params);
         }
 
         \App\Services\ActivityLogger::portalLoginForm('no active session & no grace match');
