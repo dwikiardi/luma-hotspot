@@ -197,9 +197,7 @@ class GracePeriodEngine
             'device_id' => $device->id,
             'router_id' => $router->id,
             'mac_address' => $mac,
-            'fingerprint_hash' => $fingerprint && !str_starts_with($fingerprint, 'fp-Mozilla') 
-                ? $fingerprint 
-                : ('fp-' . substr(md5($mac . ($request->userAgent() ?? '')), 0, 16)),
+            'fingerprint_hash' => ($fingerprint && !str_starts_with($fingerprint, 'fp-Mozilla')) ? $fingerprint : null,
             'cookie_token' => UserSession::generateCookieToken(),
             'ip_address' => $clientIp,
             'login_at' => now(),
