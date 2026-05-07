@@ -179,7 +179,22 @@ class PortalController extends Controller
 
         \App\Services\ActivityLogger::portalLoginForm('no active session & no grace match');
 
-        \App\Services\ActivityLogger::portalLoginForm('no active session & no grace match');
+        // Last-resort: bila gak ada signal sama sekali, cek unique user di router ini
+        // Kalau cuma 1 user → auto-login (safe karena pasti device yg sama / 1 kamar)
+        $activeUsers = UserSession::where('router_id', $router->id)
+            ->where('status', 'active')
+            ->where('expires_at', '>', now())
+            ->distinct('user_id')
+            ->pluck('user_id');
+        if ($activeUsers->count() === 1) {
+            $theSession = UserSession::where('user_id', $activeUsers->first())
+                ->where('router_id', $router->id)
+                ->where('status', 'active')
+                ->first();
+            if ($theSession) {
+                return $this->silentAutoLogin($request, $theSession, $router, $linkLogin, $dstUrl, $clientIp);
+            }
+        }
 
         $config = $router->tenant->portalConfig;
         $methods = $config->active_login_methods;

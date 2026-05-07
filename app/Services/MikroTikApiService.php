@@ -116,6 +116,32 @@ PYEOF;
         return ! empty($result) ? $result : null;
     }
 
+    /**
+     * Inject MikroTik cookie agar device auto-authenticated di layer MikroTik.
+     * Setelah ini, device dgn MAC ini gak perlu buka portal sama sekali.
+     */
+    public function addCookie(Router $router, string $username, string $mac): void
+    {
+        if ($mac === 'unknown') return;
+
+        $mikrotikIp = $this->getMikroTikIp($router);
+        $escapedIp = escapeshellarg($mikrotikIp);
+        $escapedUsername = escapeshellarg($username);
+        $escapedMac = escapeshellarg(strtoupper($mac));
+
+        $script = <<<PYEOF
+from routeros_api import RouterOsApiPool
+pool = RouterOsApiPool({$escapedIp}, username="admin", password="", plaintext_login=True, use_ssl=False)
+api = pool.get_api()
+ck = api.get_resource("/ip/hotspot/cookie")
+ck.call("add", {{"user": {$escapedUsername}, "mac-address": {$escapedMac}}})
+pool.disconnect()
+print("done")
+PYEOF;
+
+        $this->execPython($script);
+    }
+
     public function isReachable(Router $router): bool
     {
         $mikrotikIp = $this->getMikroTikIp($router);

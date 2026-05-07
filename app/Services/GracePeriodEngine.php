@@ -98,9 +98,9 @@ class GracePeriodEngine
             }
         }
 
-        // CNA fallback: kalau gak ada grace session (udah di-reactivate sync),
-        // cek active sessions via user_id uniqueness + latest radacct MAC
-        if ($isCNA && !$hasFingerprint && !$hasCookie && $sessions->isEmpty()) {
+        // Active session fallback: kalau gak ada grace session & gak ada signal,
+        // cek active sessions via user_id uniqueness + radacct + MAC
+        if (! $hasFingerprint && ! $hasCookie && $sessions->isEmpty()) {
             $activeSessions = UserSession::where('status', 'active')
                 ->where('router_id', $router->id)
                 ->where('expires_at', '>', now())
