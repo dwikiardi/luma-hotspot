@@ -222,27 +222,27 @@ Schedule::call(function () {
                 continue;
             }
 
-            // Update active session jika MAC berubah (user ganti device / rotating MAC)
+            // Update or skip active session
             $active = \App\Models\UserSession::where('user_id', $user->id)
                 ->where('router_id', $router->id)
                 ->where('status', 'active')
+                ->latest('login_at')
                 ->first();
 
             if ($active) {
                 if ($mac !== 'unknown' && $active->mac_address !== $mac) {
                     $oldMac = $active->mac_address;
-                    $active->update([
-                        'mac_address' => $mac,
-                        'ip_address' => $ip,
-                        'last_seen_at' => now(),
-                    ]);
+                    $active->update(['mac_address' => $mac, 'ip_address' => $ip, 'last_seen_at' => now()]);
                     \App\Services\ActivityLogger::syncMacUpdated($identity, $active->id, $oldMac, $mac);
                 } else {
-                    $active->update([
-                        'ip_address' => $ip,
-                        'last_seen_at' => now(),
-                    ]);
+                    $active->update(['ip_address' => $ip, 'last_seen_at' => now()]);
                 }
+                // Expire any duplicate active sessions (safety)
+                \App\Models\UserSession::where('user_id', $user->id)
+                    ->where('router_id', $router->id)
+                    ->where('status', 'active')
+                    ->where('id', '!=', $active->id)
+                    ->update(['status' => 'expired']);
                 continue;
             }
 
