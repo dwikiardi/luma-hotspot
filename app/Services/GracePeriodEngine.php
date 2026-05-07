@@ -69,8 +69,10 @@ class GracePeriodEngine
         );
 
         foreach ($allSessions as $session) {
-            // Primary: fingerprint match (strongest signal)
-            if ($hasFingerprint && $session->fingerprint_hash === $fingerprint) {
+            // Primary: fingerprint match (HANYA real JS fingerprint, bukan UA fallback)
+            // UA fallback dimulai dengan "fp-Mozilla" — jangan di-match (tidak unique per device)
+            $isRealFp = $hasFingerprint && !str_starts_with($fingerprint, 'fp-Mozilla');
+            if ($isRealFp && $session->fingerprint_hash === $fingerprint) {
                 \App\Services\ActivityLogger::graceAutoLogin(
                     User::find($session->user_id)?->identity_value ?? '?',
                     $session->id, $session->mac_address, $session->ip_address ?? '?'
@@ -159,12 +161,13 @@ class GracePeriodEngine
         $fingerprint = $request->header('X-Fingerprint') ?? $request->input('fingerprint');
         $cookie = $request->cookie('luma_session');
 
-        // Reactivate existing session by fingerprint or cookie
+        // Reactivate existing session by fingerprint or cookie (real JS fp only)
+        $isRealFp = $fingerprint && !str_starts_with($fingerprint, 'fp-Mozilla');
         $existing = UserSession::where('user_id', $user->id)
             ->where('router_id', $router->id)
             ->whereIn('status', ['active', 'disconnected'])
-            ->where(function ($q) use ($fingerprint, $cookie, $mac) {
-                if ($fingerprint) $q->orWhere('fingerprint_hash', $fingerprint);
+            ->where(function ($q) use ($isRealFp, $fingerprint, $cookie, $mac) {
+                if ($isRealFp && $fingerprint) $q->orWhere('fingerprint_hash', $fingerprint);
                 if ($cookie) $q->orWhere('cookie_token', $cookie);
                 if ($mac && $mac !== 'unknown') $q->orWhere('mac_address', $mac);
             })
@@ -180,7 +183,8 @@ class GracePeriodEngine
                 'disconnected_at' => null,
                 'ip_address' => $clientIp ?: $existing->ip_address,
                 'mac_address' => $mac !== 'unknown' ? $mac : $existing->mac_address,
-                'fingerprint_hash' => $fingerprint ?: $existing->fingerprint_hash,
+                // Only overwrite fingerprint with real JS fp, never with UA fallback
+                'fingerprint_hash' => ($isRealFp && $fingerprint) ? $fingerprint : $existing->fingerprint_hash,
                 'cookie_token' => $cookie ?: $existing->cookie_token,
             ]);
             $this->logDeviceFingerprint($request, $user, $device, $router);
@@ -193,7 +197,9 @@ class GracePeriodEngine
             'device_id' => $device->id,
             'router_id' => $router->id,
             'mac_address' => $mac,
-            'fingerprint_hash' => $fingerprint ?? ('fp-' . substr(md5($request->userAgent()), 0, 16)),
+            'fingerprint_hash' => $fingerprint && !str_starts_with($fingerprint, 'fp-Mozilla') 
+                ? $fingerprint 
+                : ('fp-' . substr(md5($mac . ($request->userAgent() ?? '')), 0, 16)),
             'cookie_token' => UserSession::generateCookieToken(),
             'ip_address' => $clientIp,
             'login_at' => now(),
