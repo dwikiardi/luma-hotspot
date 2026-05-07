@@ -161,7 +161,7 @@ class GracePeriodEngine
         $fingerprint = $request->header('X-Fingerprint') ?? $request->input('fingerprint');
         $cookie = $request->cookie('luma_session');
 
-        // Reactivate existing session by fingerprint or cookie (real JS fp only)
+        // Reactivate existing session by fingerprint, cookie, or MAC
         $isRealFp = $fingerprint && !str_starts_with($fingerprint, 'fp-Mozilla');
         $existing = UserSession::where('user_id', $user->id)
             ->where('router_id', $router->id)
@@ -174,7 +174,24 @@ class GracePeriodEngine
             ->orderByDesc('login_at')
             ->first();
 
+        // Fallback: no signal match → reactivate most recent session for this user
+        // (User entered room number = we KNOW it's them. Always reactivate, never duplicate.)
+        if (! $existing) {
+            $existing = UserSession::where('user_id', $user->id)
+                ->where('router_id', $router->id)
+                ->whereIn('status', ['active', 'disconnected'])
+                ->orderByDesc('login_at')
+                ->first();
+        }
+
         if ($existing) {
+            // Expire any OTHER active sessions for this user (clean duplicates)
+            UserSession::where('user_id', $user->id)
+                ->where('router_id', $router->id)
+                ->where('status', 'active')
+                ->where('id', '!=', $existing->id)
+                ->update(['status' => 'expired']);
+
             $existing->update([
                 'status' => 'active',
                 'login_at' => now(),
@@ -183,7 +200,6 @@ class GracePeriodEngine
                 'disconnected_at' => null,
                 'ip_address' => $clientIp ?: $existing->ip_address,
                 'mac_address' => $mac !== 'unknown' ? $mac : $existing->mac_address,
-                // Only overwrite fingerprint with real JS fp, never with UA fallback
                 'fingerprint_hash' => ($isRealFp && $fingerprint) ? $fingerprint : $existing->fingerprint_hash,
                 'cookie_token' => $cookie ?: $existing->cookie_token,
             ]);
