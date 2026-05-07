@@ -112,6 +112,10 @@ Schedule::call(function () {
         ->orderByDesc('radacctid')
         ->get();
 
+    if ($stopped->isNotEmpty()) {
+        \App\Services\ActivityLogger::log('scheduler', 'disconnect_check', "Checking {$stopped->count()} stopped radacct records");
+    }
+
     foreach ($stopped as $rec) {
         $user = \Illuminate\Support\Facades\DB::table('users')
             ->where('identity_value', $rec->username)
@@ -137,7 +141,7 @@ Schedule::call(function () {
         // Disconnect semua session active > 60s untuk user ini,
         // hanya yg login sebelum disconnect (login_at < acctstoptime)
         $expiresAt = \Carbon\Carbon::parse($rec->acctstoptime)->addSeconds($graceSeconds);
-        \App\Models\UserSession::where('user_id', $user->id)
+        $updated = \App\Models\UserSession::where('user_id', $user->id)
             ->where('status', 'active')
             ->where('login_at', '<', now()->subSeconds(60))
             ->where('login_at', '<', $rec->acctstoptime)
@@ -150,6 +154,17 @@ Schedule::call(function () {
                     ? preg_replace('/\/\d+$/', '', $rec->framedipaddress) 
                     : \Illuminate\Support\Facades\DB::raw('ip_address'),
             ]);
+        if ($updated > 0) {
+            \App\Services\ActivityLogger::disconnectSession(
+                $rec->username, $user->id, $expiresAt->toDateTimeString()
+            );
+            \App\Services\ActivityLogger::disconnectDetected(
+                $rec->username,
+                $rec->callingstationid ?: '?',
+                $rec->framedipaddress ?: '?',
+                $rec->acctterminatecause ?: 'unknown'
+            );
+        }
     }
 })->everyMinute();
 
@@ -159,11 +174,12 @@ Schedule::call(function () {
         $service = app(\App\Services\MikroTikApiService::class);
         
         // Sync per router — hanya yg punya nas_identifier yg match dgn MikroTik
-        // Karena MikroTik API return semua user hotspot, kita perlu assign ke router yg tepat
         $routers = \App\Models\Router::where('is_active', true)->get();
         $users = $service->getActiveUsers($routers->first());
 
         if (empty($users)) return;
+
+        \App\Services\ActivityLogger::syncActiveUsers(count($users), array_column($users, 'user'));
 
         // Ambil router pertama yg ada nas_identifier-nya (yg benar terhubung ke MikroTik)
         $router = $routers->firstWhere('nas_identifier', 'eden-canggu') 
@@ -202,6 +218,7 @@ Schedule::call(function () {
                     'ip_address' => $ip,
                     'mac_address' => $mac !== 'unknown' ? $mac : $disconnected->mac_address,
                 ]);
+                \App\Services\ActivityLogger::syncReactivate($identity, $disconnected->id, $mac);
                 continue;
             }
 
@@ -213,11 +230,13 @@ Schedule::call(function () {
 
             if ($active) {
                 if ($mac !== 'unknown' && $active->mac_address !== $mac) {
+                    $oldMac = $active->mac_address;
                     $active->update([
                         'mac_address' => $mac,
                         'ip_address' => $ip,
                         'last_seen_at' => now(),
                     ]);
+                    \App\Services\ActivityLogger::syncMacUpdated($identity, $active->id, $oldMac, $mac);
                 } else {
                     $active->update([
                         'ip_address' => $ip,

@@ -81,6 +81,8 @@ class PortalController extends Controller
             'ip' => $clientIp ?: null,
         ]);
 
+        \App\Services\ActivityLogger::portalOpened($mac, $clientIp ?? 'unknown', $this->detectCNA($request->userAgent() ?? ''));
+
         $graceResult = $this->graceEngine->check($request, $router);
 
         // Cek session aktif via MAC (untuk device tanpa cookie seperti sync sessions)
@@ -106,6 +108,10 @@ class PortalController extends Controller
 
         if ($activeSession) {
             $user = User::find($activeSession->user_id);
+            \App\Services\ActivityLogger::portalActiveRedirect(
+                $user?->identity_value ?? '?',
+                $mac
+            );
             $loginUrl = $this->buildMikroTikLoginUrl(
                 $router,
                 $user?->identity_value ?? '',
@@ -157,6 +163,8 @@ class PortalController extends Controller
 
             return $this->silentAutoLogin($request, $session, $router, $linkLogin, $dstUrl, $clientIp);
         }
+
+        \App\Services\ActivityLogger::portalLoginForm('no active session & no grace match');
 
         $config = $router->tenant->portalConfig;
         $methods = $config->active_login_methods;
@@ -214,6 +222,8 @@ class PortalController extends Controller
 
         $username = $user->identity_value;
         $password = $user->identity_value;
+
+        \App\Services\ActivityLogger::portalSilentLogin($username, $session->mac_address, $clientIp ?? 'unknown');
 
         // Disconnect old session on MikroTik to prevent "already active" conflict
         try {

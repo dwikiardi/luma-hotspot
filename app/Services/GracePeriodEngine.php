@@ -35,7 +35,7 @@ class GracePeriodEngine
 {
     public function check(Request $request, Router $router): GraceCheckResult
     {
-        $mac = $request->query('client_mac');
+        $mac = $request->query('client_mac') ?? $request->query('mac');
         $cookie = $request->cookie('luma_session');
         $fingerprint = $request->header('X-Fingerprint') ?? $request->query('fingerprint');
         $ip = $request->ip();
@@ -53,12 +53,26 @@ class GracePeriodEngine
         $isCNA = str_contains($request->userAgent() ?? '', 'CaptiveNetworkSupport')
             || str_contains($request->header('User-Agent') ?? '', 'CaptiveNetworkSupport');
 
+        if ($isCNA || $hasFingerprint || $hasCookie || $hasValidMac) {
+            \App\Services\ActivityLogger::graceCheck(
+                $mac ?: 'unknown',
+                $isCNA,
+                $sessions->count(),
+                UserSession::where('status', 'active')->where('router_id', $router->id)->count()
+            );
+        }
+
         // iPhone CNA: tidak ada fingerprint/cookie → auto-login session
         // Aman kalau semua disconnected session milik user yg sama (group tamu 1 kamar)
         if ($isCNA && !$hasFingerprint && !$hasCookie && $sessions->isNotEmpty()) {
             $uniqueUsers = $sessions->pluck('user_id')->unique();
             if ($uniqueUsers->count() === 1) {
-                return GraceCheckResult::autoLogin($sessions->first());
+                $s = $sessions->first();
+                \App\Services\ActivityLogger::graceAutoLogin(
+                    User::find($s->user_id)?->identity_value ?? '?',
+                    $s->id, $s->mac_address, $s->ip_address ?? '?'
+                );
+                return GraceCheckResult::autoLogin($s);
             }
         }
 
@@ -75,6 +89,10 @@ class GracePeriodEngine
                 if ($hasValidMac) {
                     $macMatch = $activeSessions->firstWhere('mac_address', $mac);
                     if ($macMatch) {
+                        \App\Services\ActivityLogger::graceAutoLogin(
+                            User::find($macMatch->user_id)?->identity_value ?? '?',
+                            $macMatch->id, $mac, $macMatch->ip_address ?? '?'
+                        );
                         return GraceCheckResult::autoLogin($macMatch);
                     }
                     // Cek radacct: user mana yg punya MAC ini (sedang connected)
@@ -156,6 +174,10 @@ class GracePeriodEngine
             }
 
             if ($score >= $threshold) {
+                \App\Services\ActivityLogger::graceAutoLogin(
+                    User::find($session->user_id)?->identity_value ?? '?',
+                    $session->id, $session->mac_address, $session->ip_address ?? '?'
+                );
                 return GraceCheckResult::autoLogin($session);
             }
         }
@@ -196,10 +218,18 @@ class GracePeriodEngine
                 }
 
                 if ($score >= $threshold) {
+                    \App\Services\ActivityLogger::graceAutoLogin(
+                        User::find($session->user_id)?->identity_value ?? '?',
+                        $session->id, $session->mac_address, $session->ip_address ?? '?'
+                    );
                     return GraceCheckResult::autoLogin($session);
                 }
             }
         }
+
+        \App\Services\ActivityLogger::graceRequireLogin(
+            $isCNA ? 'CNA no match' : ($hasFingerprint ? 'fp no match' : ($hasCookie ? 'cookie no match' : 'no signal'))
+        );
 
         return GraceCheckResult::requireLogin();
     }

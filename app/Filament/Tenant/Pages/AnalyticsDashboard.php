@@ -3,6 +3,7 @@
 namespace App\Filament\Tenant\Pages;
 
 use App\Filament\Tenant\Widgets\ActiveSessionsWidget;
+use App\Filament\Tenant\Widgets\ActivityLogWidget;
 use App\Filament\Tenant\Widgets\GracePeriodStatsWidget;
 use App\Filament\Tenant\Widgets\LoginMethodChartWidget;
 use App\Filament\Tenant\Widgets\MikroTikHotspotWidget;
@@ -40,6 +41,7 @@ class AnalyticsDashboard extends BaseDashboard
     protected function getFooterWidgets(): array
     {
         return [
+            ActivityLogWidget::class,
             PeakHourChartWidget::class,
             LoginMethodChartWidget::class,
             GracePeriodStatsWidget::class,
