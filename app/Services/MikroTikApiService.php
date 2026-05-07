@@ -84,8 +84,6 @@ PYEOF;
         $this->execPython($script);
     }
 
-    public function isReachable(Router $router): bool
-
     public function getHostByMac(Router $router, string $mac): ?array
     {
         if ($mac === 'unknown') return null;
@@ -118,7 +116,7 @@ PYEOF;
         return ! empty($result) ? $result : null;
     }
 
-    public function isReachable(Router $router): bool
+    public function isReachable(Router $router): boolRouter $router): bool
     {
         $mikrotikIp = $this->getMikroTikIp($router);
         $escapedIp = escapeshellarg($mikrotikIp);
