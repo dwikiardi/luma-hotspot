@@ -6,6 +6,7 @@ use App\Models\DeviceFingerprint;
 use App\Models\Router;
 use Filament\Resources\Resource;
 use Filament\Tables;
+use Filament\Tables\Filters\Filter;
 use Filament\Tables\Table;
 
 class DeviceLogResource extends Resource
@@ -58,13 +59,66 @@ class DeviceLogResource extends Resource
                     ->default('-'),
 
                 Tables\Columns\TextColumn::make('trust_score')
-                    ->label('Trust Score')
+                    ->label('Trust')
                     ->badge()
                     ->color(fn (int $state): string => match (true) {
                         $state >= 80 => 'success',
                         $state >= 50 => 'warning',
                         default => 'danger',
                     }),
+
+                Tables\Columns\TextColumn::make('mac')
+                    ->label('MAC')
+                    ->copyable()
+                    ->fontFamily('mono')
+                    ->size('text-xs')
+                    ->default('-'),
+
+                Tables\Columns\TextColumn::make('ip_address')
+                    ->label('IP')
+                    ->copyable()
+                    ->fontFamily('mono')
+                    ->size('text-xs')
+                    ->default('-'),
+
+                Tables\Columns\TextColumn::make('browser_name')
+                    ->label('Browser')
+                    ->formatStateUsing(fn ($state, $record) => $state . ' ' . ($record->browser_version ?? ''))
+                    ->default('-'),
+
+                Tables\Columns\TextColumn::make('os_name')
+                    ->label('OS')
+                    ->formatStateUsing(fn ($state, $record) => $state . ' ' . ($record->os_version ?? ''))
+                    ->default('-'),
+
+                Tables\Columns\TextColumn::make('platform')
+                    ->label('Platform')
+                    ->badge(),
+
+                Tables\Columns\TextColumn::make('screen_resolution')
+                    ->label('Screen')
+                    ->size('text-xs')
+                    ->default('-'),
+
+                Tables\Columns\TextColumn::make('device_memory')
+                    ->label('RAM')
+                    ->formatStateUsing(fn ($state) => $state ? $state . 'GB' : '-')
+                    ->size('text-xs'),
+
+                Tables\Columns\IconColumn::make('touch_support')
+                    ->label('Touch')
+                    ->boolean(),
+
+                Tables\Columns\TextColumn::make('webgl_vendor')
+                    ->label('GPU')
+                    ->size('text-xs')
+                    ->limit(20)
+                    ->default('-'),
+
+                Tables\Columns\TextColumn::make('timezone')
+                    ->label('TZ')
+                    ->size('text-xs')
+                    ->default('-'),
 
                 Tables\Columns\TextColumn::make('confidence')
                     ->label('Confidence')
@@ -80,28 +134,15 @@ class DeviceLogResource extends Resource
                     ->boolean(),
 
                 Tables\Columns\TextColumn::make('match_count')
-                    ->label('Matches')
+                    ->label('Match')
                     ->badge()
                     ->color('info'),
-
-                Tables\Columns\TextColumn::make('browser_name')
-                    ->label('Browser')
-                    ->formatStateUsing(fn ($state, $record) => $state . ' ' . ($record->browser_version ?? '')),
-
-                Tables\Columns\TextColumn::make('os_name')
-                    ->label('OS')
-                    ->formatStateUsing(fn ($state, $record) => $state . ' ' . ($record->os_version ?? '')),
-
-                Tables\Columns\TextColumn::make('platform')
-                    ->label('Platform')
-                    ->badge(),
 
                 Tables\Columns\TextColumn::make('fingerprint_hash')
                     ->label('Fingerprint')
                     ->copyable()
                     ->fontFamily('mono')
-                    ->size('text-xs')
-                    ->limit(16),
+                    ->size('text-xs'),
 
                 Tables\Columns\TextColumn::make('created_at')
                     ->label('First Seen')
@@ -114,7 +155,7 @@ class DeviceLogResource extends Resource
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('login_count')
-                    ->label('Login Count')
+                    ->label('Logins')
                     ->state(fn ($record) => \App\Models\UserSession::where('fingerprint_hash', $record->fingerprint_hash)->count())
                     ->badge()
                     ->color('primary'),
@@ -125,6 +166,18 @@ class DeviceLogResource extends Resource
                     ->options([1 => 'Yes', 0 => 'No']),
                 Tables\Filters\SelectFilter::make('confidence')
                     ->options(['high' => 'High', 'medium' => 'Medium', 'low' => 'Low']),
+                Tables\Filters\SelectFilter::make('platform')
+                    ->options(fn () => \App\Models\DeviceFingerprint::distinct()
+                        ->whereNotNull('platform')->pluck('platform', 'platform')->toArray()),
+                Tables\Filters\SelectFilter::make('touch_support')
+                    ->label('Touch Screen')
+                    ->options([1 => 'Yes', 0 => 'No']),
+                Tables\Filters\Filter::make('has_mac')
+                    ->label('Has MAC')
+                    ->query(fn ($q) => $q->whereNotNull('mac')->where('mac', '!=', '')),
+                Tables\Filters\Filter::make('has_ip')
+                    ->label('Has IP')
+                    ->query(fn ($q) => $q->whereNotNull('ip_address')),
             ])
             ->defaultSort('updated_at', 'desc')
             ->paginated([15, 25, 50])
