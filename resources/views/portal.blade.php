@@ -175,9 +175,6 @@
     </style>
 </head>
 <body>
-    @if($isCNA && $isIOS)
-        @include('portal.cna_bridge')
-    @else
     <div  class="portal-container">
         <header class="header">
             <div class="logo">
@@ -416,6 +413,5 @@
         function handleOtpInput(e, el) {}
         function handleOtpKeydown(e, el) {}
     </script>
-    @endif
 </body>
 </html>

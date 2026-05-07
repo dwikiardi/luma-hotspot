@@ -22,6 +22,7 @@ class PortalController extends Controller
         $mac = $request->query('client_mac') ?? $request->query('mac') ?? $request->query('callingstationid') ?? 'unknown';
         $linkLogin = $request->query('link_login');
         $dstUrl = $request->query('dst') ?? $request->query('redirect') ?? 'https://www.google.com';
+        $isBrowser = $request->query('browser') === '1';
 
         // Get real client IP from various sources (never empty string)
         $clientIp = $request->query('ip') 
@@ -72,6 +73,43 @@ class PortalController extends Controller
                 'linkLogin' => $linkLogin,
                 'dstUrl' => $dstUrl,
             ]);
+        }
+
+        // CAPTURE PORTAL → REDIRECT TO BROWSER
+        // Captive portal webview gak punya JS fingerprint & cookies tidak persisten
+        // Solusi: redirect ke browser sistem supaya fingerprint + cookie berfungsi
+        $isCNA = $this->detectCNA($request->userAgent() ?? '');
+        $isIOS = $this->isIOS($request->userAgent() ?? '');
+        $isAndroid = $this->isAndroid($request->userAgent() ?? '');
+        $isCaptivePortal = ($isCNA || $isAndroid) && !$isBrowser;
+
+        if ($isCaptivePortal) {
+            $params = http_build_query([
+                'nas_id' => $nasId,
+                'client_mac' => $mac,
+                'link_login' => $linkLogin,
+                'dst' => $dstUrl,
+                'browser' => '1',
+            ]);
+            $portalUrl = url('/portal?' . $params);
+
+            if ($isCNA && $isIOS) {
+                return view('portal.open_in_browser', [
+                    'title' => 'Buka di Safari',
+                    'message' => 'Ketuk tombol di bawah untuk membuka portal WiFi di Safari.',
+                    'portalUrl' => $portalUrl,
+                    'branding' => $router?->tenant?->portalConfig?->branding ?? ['color' => '#6366f1'],
+                ]);
+            }
+
+            if ($isAndroid) {
+                return view('portal.open_in_browser', [
+                    'title' => 'Buka di Browser',
+                    'message' => 'Ketuk tombol di bawah untuk membuka portal WiFi di browser.',
+                    'portalUrl' => $portalUrl,
+                    'branding' => $router?->tenant?->portalConfig?->branding ?? ['color' => '#6366f1'],
+                ]);
+            }
         }
 
         $this->analytics->track('portal_opened', [
