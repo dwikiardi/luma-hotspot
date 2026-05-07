@@ -174,7 +174,7 @@ class GracePeriodEngine
 
             // MAC match (tidak wajib, karena random MAC)
             if ($hasValidMac && $session->mac_address === $mac) {
-                $score += 2;
+                $score += 3;
             }
 
             // IP match
@@ -212,6 +212,20 @@ class GracePeriodEngine
                     $session->id, $session->mac_address, $session->ip_address ?? '?'
                 );
                 return GraceCheckResult::autoLogin($session);
+            }
+        }
+
+        // Final fallback: disconnected session gak match by signal, tapi cuma 1 unique user
+        // → pasti device yg sama reconnect
+        if ($sessions->isNotEmpty()) {
+            $uniqueUsers = $sessions->pluck('user_id')->unique();
+            if ($uniqueUsers->count() === 1) {
+                $s = $sessions->first();
+                \App\Services\ActivityLogger::graceAutoLogin(
+                    User::find($s->user_id)?->identity_value ?? '?',
+                    $s->id, $s->mac_address, $s->ip_address ?? '?'
+                );
+                return GraceCheckResult::autoLogin($s);
             }
         }
 
