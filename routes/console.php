@@ -258,6 +258,7 @@ Schedule::call(function () {
                     \App\Services\ActivityLogger::syncSessionCreated($identity, $user->id, $mac);
                 }
             }
+        }
     } catch (\Throwable $e) {
         \Illuminate\Support\Facades\Log::warning('MikroTik sync failed', ['error' => $e->getMessage()]);
     }
