@@ -130,6 +130,8 @@ Schedule::call(function () {
             ->first();
         if (! $session) continue;
 
+        // Disconnect: set grace period dari SEKARANG (bukan dari acctstoptime lama)
+        // acctstoptime bisa sangat lampau — kalau kita pakai + grace, expires_at bisa udah lewat
         $graceSeconds = 172800; // default 48h
         if ($session->router && $session->router->tenant) {
             $config = \App\Models\PortalConfig::where('tenant_id', $session->router->tenant_id)
@@ -140,7 +142,7 @@ Schedule::call(function () {
 
         // Disconnect session active > 60s untuk user ini,
         // hanya yg login sebelum disconnect (login_at < acctstoptime)
-        $expiresAt = \Carbon\Carbon::parse($rec->acctstoptime)->addSeconds($graceSeconds);
+        $expiresAt = now()->addSeconds($graceSeconds); // selalu dari sekarang
         $updated = \App\Models\UserSession::where('user_id', $user->id)
             ->where('status', 'active')
             ->where('login_at', '<', now()->subSeconds(60))
@@ -220,7 +222,7 @@ Schedule::call(function () {
                 if ($session->status === 'disconnected') {
                     $updates['status'] = 'active';
                     $updates['login_at'] = now();
-                    $updates['expires_at'] = now()->addHours(4);
+                    $updates['expires_at'] = now()->addHours(24);
                     $updates['disconnected_at'] = null;
                 }
                 if ($mac !== 'unknown' && $session->mac_address !== $mac) {

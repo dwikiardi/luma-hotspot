@@ -121,7 +121,7 @@ class GracePeriodEngine
         Router $router
     ): UserSession {
         $config = $router->tenant->portalConfig;
-        $sessionTimeout = $config->session_timeout ?? 14400;
+        $sessionTimeout = $config->session_timeout ?? 86400; // default 24h (was 14400 = 4h)
 
         $mac = $request->query('client_mac')
             ?? $request->input('client_mac')
