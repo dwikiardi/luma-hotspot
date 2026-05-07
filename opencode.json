@@ -19,6 +19,11 @@
       "type": "local",
       "command": ["/home/support/.local/node/bin/node", "/home/support/.local/node/lib/node_modules/@playwright/mcp/cli.js", "--headless", "--browser", "chromium", "--image-responses", "allow"],
       "enabled": true
+    },
+    "sequential-thinking": {
+      "type": "local",
+      "command": ["docker", "run", "--rm", "-i", "mcp/sequentialthinking"],
+      "enabled": true
     }
   }
 }
