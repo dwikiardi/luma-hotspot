@@ -197,11 +197,15 @@ class GracePeriodEngine
         try {
             $fp = $request->header('X-Fingerprint') ?? $request->input('fingerprint') ?? ('fp-' . substr(md5($request->userAgent()), 0, 16));
 
-            // Parse full FingerprintJS components data
+            // Parse full FingerprintJS components data (from body or header)
             $fpData = [];
-            $fpDataRaw = $request->header('X-Fingerprint-Data');
+            $fpDataRaw = $request->input('fingerprint_data') ?? $request->header('X-Fingerprint-Data');
             if ($fpDataRaw) {
-                $fpData = json_decode($fpDataRaw, true) ?? [];
+                if (is_string($fpDataRaw)) {
+                    $fpData = json_decode($fpDataRaw, true) ?? [];
+                } elseif (is_array($fpDataRaw)) {
+                    $fpData = $fpDataRaw;
+                }
             }
 
             $existing = \App\Models\DeviceFingerprint::where('fingerprint_hash', $fp)->first();
