@@ -68,9 +68,20 @@
         <p class="hint">Portal akan terbuka otomatis</p>
     </div>
     <script>
-        setTimeout(function() {
-            window.location.href = "{{ $portalUrl }}";
-        }, 1000);
+        var isAndroid = /Android/i.test(navigator.userAgent);
+        
+        if (isAndroid) {
+            // Android: use intent to open Chrome (captive portal WebView blocks window.open)
+            var intentUrl = 'intent://103.137.140.6:8081/portal?browser=1&nas_id={{ urlencode($nasId ?? '') }}&client_mac={{ urlencode($mac ?? '') }}&link_login={{ urlencode($linkLogin ?? '') }}&dst={{ urlencode($dstUrl ?? '') }}#Intent;scheme=http;package=com.android.chrome;end';
+            setTimeout(function() {
+                window.location.href = intentUrl;
+            }, 800);
+        } else {
+            // iOS: redirect to portal in Safari
+            setTimeout(function() {
+                window.location.href = "{{ $portalUrl }}";
+            }, 1000);
+        }
     </script>
 </body>
 </html>

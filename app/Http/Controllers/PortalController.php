@@ -98,6 +98,10 @@ class PortalController extends Controller
                     'title' => 'Buka di Safari',
                     'message' => 'Ketuk tombol di bawah untuk membuka portal WiFi di Safari.',
                     'portalUrl' => $portalUrl,
+                    'nasId' => $nasId,
+                    'mac' => $mac,
+                    'linkLogin' => $linkLogin,
+                    'dstUrl' => $dstUrl,
                     'branding' => $router?->tenant?->portalConfig?->branding ?? ['color' => '#6366f1'],
                 ]);
             }
@@ -107,6 +111,10 @@ class PortalController extends Controller
                     'title' => 'Buka di Browser',
                     'message' => 'Ketuk tombol di bawah untuk membuka portal WiFi di browser.',
                     'portalUrl' => $portalUrl,
+                    'nasId' => $nasId,
+                    'mac' => $mac,
+                    'linkLogin' => $linkLogin,
+                    'dstUrl' => $dstUrl,
                     'branding' => $router?->tenant?->portalConfig?->branding ?? ['color' => '#6366f1'],
                 ]);
             }
@@ -341,9 +349,13 @@ class PortalController extends Controller
 
     private function detectCNA(string $ua): bool
     {
+        // iOS: CaptiveNetworkSupport in User-Agent
+        // Android: Some captive portal WebViews also have this
         return str_contains($ua, 'CaptiveNetworkSupport')
             || str_contains($ua, 'wispr')
-            || str_contains($ua, 'CaptiveNetwork');
+            || str_contains($ua, 'CaptiveNetwork')
+            // iOS 12+ sometimes uses different UA for captive portal
+            || (str_contains($ua, 'iPhone') && str_contains($ua, 'OS 1') && !str_contains($ua, 'Safari'));
     }
 
     private function isIOS(string $ua): bool
