@@ -127,7 +127,19 @@ class DeviceLogResource extends Resource
                     ->options(['high' => 'High', 'medium' => 'Medium', 'low' => 'Low']),
             ])
             ->defaultSort('updated_at', 'desc')
-            ->paginated([15, 25, 50]);
+            ->paginated([15, 25, 50])
+            ->actions([
+                Tables\Actions\DeleteAction::make()
+                    ->label('Hapus')
+                    ->modalHeading('Hapus fingerprint ini?')
+                    ->modalDescription('Data fingerprint akan dihapus permanen.')
+                    ->successNotificationTitle('Fingerprint berhasil dihapus'),
+            ])
+            ->bulkActions([
+                Tables\Actions\DeleteBulkAction::make()
+                    ->label('Hapus yang dipilih')
+                    ->modalHeading('Hapus fingerprint yang dipilih?'),
+            ]);
     }
 
     public static function getPages(): array
