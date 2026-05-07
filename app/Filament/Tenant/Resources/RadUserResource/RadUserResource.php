@@ -114,13 +114,45 @@ class RadUserResource extends Resource
                     ->label('Hapus')
                     ->modalHeading('Hapus pengguna ini?')
                     ->modalDescription('Semua data pengguna termasuk sesi akan dihapus.')
-                    ->successNotificationTitle('Pengguna berhasil dihapus'),
+                    ->successNotificationTitle('Pengguna berhasil dihapus')
+                    ->before(function (User $record) {
+                        // Delete semua analytics untuk user ini
+                        DB::table('analytics_events')->where('user_id', $record->id)->delete();
+                        // Delete analytics untuk semua device user ini
+                        DB::table('analytics_events')
+                            ->whereIn('device_id', function ($q) use ($record) {
+                                $q->select('id')->from('devices')->where('user_id', $record->id);
+                            })->delete();
+                        \App\Models\UserSession::where('user_id', $record->id)->delete();
+                        \App\Models\Device::where('user_id', $record->id)->delete();
+                        DB::table('device_fingerprints')->where('user_id', $record->id)->delete();
+                        DB::table('visitor_profiles')->where('user_id', $record->id)->delete();
+                        DB::table('radcheck')->where('username', $record->identity_value)->delete();
+                        DB::table('radreply')->where('username', $record->identity_value)->delete();
+                        DB::table('radusergroup')->where('username', $record->identity_value)->delete();
+                    }),
             ])
             ->bulkActions([
                 Tables\Actions\DeleteBulkAction::make()
                     ->label('Hapus yang dipilih')
                     ->modalHeading('Hapus pengguna yang dipilih?')
-                    ->modalDescription('Semua data akan dihapus permanen.'),
+                    ->modalDescription('Semua data akan dihapus permanen.')
+                    ->before(function (\Illuminate\Support\Collection $records) {
+                        foreach ($records as $record) {
+                            DB::table('analytics_events')->where('user_id', $record->id)->delete();
+                            DB::table('analytics_events')
+                                ->whereIn('device_id', function ($q) use ($record) {
+                                    $q->select('id')->from('devices')->where('user_id', $record->id);
+                                })->delete();
+                            \App\Models\UserSession::where('user_id', $record->id)->delete();
+                            \App\Models\Device::where('user_id', $record->id)->delete();
+                            DB::table('device_fingerprints')->where('user_id', $record->id)->delete();
+                            DB::table('visitor_profiles')->where('user_id', $record->id)->delete();
+                            DB::table('radcheck')->where('username', $record->identity_value)->delete();
+                            DB::table('radreply')->where('username', $record->identity_value)->delete();
+                            DB::table('radusergroup')->where('username', $record->identity_value)->delete();
+                        }
+                    }),
             ]);
     }
 
