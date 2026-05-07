@@ -162,8 +162,9 @@ Schedule::call(function () {
                 $user = \App\Models\User::where('identity_value', $identity)->first();
                 if (! $user) continue;
 
-                // Skip if already active in DB
+                // Skip if already active in DB for THIS router
                 $exists = \App\Models\UserSession::where('user_id', $user->id)
+                    ->where('router_id', $router->id)
                     ->where('status', 'active')
                     ->exists();
                 if ($exists) continue;
