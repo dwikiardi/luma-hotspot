@@ -75,13 +75,12 @@ class PortalController extends Controller
             ]);
         }
 
-        // CAPTURE PORTAL → REDIRECT TO BROWSER
-        // Captive portal webview gak punya JS fingerprint & cookies tidak persisten
-        // Solusi: redirect ke browser sistem supaya fingerprint + cookie berfungsi
-        $isCNA = $this->detectCNA($request->userAgent() ?? '');
-        $isIOS = $this->isIOS($request->userAgent() ?? '');
-        $isAndroid = $this->isAndroid($request->userAgent() ?? '');
-        $isCaptivePortal = ($isCNA || $isAndroid) && !$isBrowser;
+        // CAPTIVE PORTAL → REDIRECT TO SYSTEM BROWSER
+        // Captive portal (CNA/WebView) gak punya JS fingerprint & cookies tidak persisten
+        // Deteksi: iOS tanpa browser=1, atau Android (semua WebView)
+        $isIOSDevice = $this->isIOS($request->userAgent() ?? '');
+        $isAndroidDevice = $this->isAndroid($request->userAgent() ?? '');
+        $isCaptivePortal = ($isIOSDevice || $isAndroidDevice) && !$isBrowser;
 
         if ($isCaptivePortal) {
             $params = http_build_query([
@@ -93,7 +92,7 @@ class PortalController extends Controller
             ]);
             $portalUrl = url('/portal?' . $params);
 
-            if ($isCNA && $isIOS) {
+            if ($isIOSDevice) {
                 $safariUrl = str_replace('http://', 'x-safari-https://', $portalUrl);
                 return view('portal.open_in_browser', [
                     'title' => 'Buka di Safari',
@@ -108,7 +107,7 @@ class PortalController extends Controller
                 ]);
             }
 
-            if ($isAndroid) {
+            if ($isAndroidDevice) {
                 return view('portal.open_in_browser', [
                     'title' => 'Buka di Browser',
                     'message' => 'Ketuk tombol di bawah untuk membuka portal WiFi di browser.',
