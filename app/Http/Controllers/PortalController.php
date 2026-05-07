@@ -129,6 +129,15 @@ class PortalController extends Controller
 
         \App\Services\ActivityLogger::portalOpened($mac, $clientIp ?? 'unknown', $this->detectCNA($request->userAgent() ?? ''));
 
+        // Debug: log User-Agent untuk troubleshooting CNA detection
+        \Illuminate\Support\Facades\Log::info('[PORTAL UA]', [
+            'ua' => $request->userAgent(),
+            'isCNA' => $this->detectCNA($request->userAgent() ?? ''),
+            'isIOS' => $this->isIOS($request->userAgent() ?? ''),
+            'isAndroid' => $this->isAndroid($request->userAgent() ?? ''),
+            'browser' => $request->query('browser'),
+        ]);
+
         $graceResult = $this->graceEngine->check($request, $router);
 
         // Cek session aktif via MAC (untuk device tanpa cookie seperti sync sessions)
