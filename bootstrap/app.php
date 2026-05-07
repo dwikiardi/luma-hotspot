@@ -22,6 +22,10 @@ return Application::configure(basePath: dirname(__DIR__))
             '/api/fingerprint/*',
             '/radius/accounting',
         ]);
+
+        $middleware->web(append: [
+            \App\Http\Middleware\SetTenantTimezone::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

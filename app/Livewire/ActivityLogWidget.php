@@ -12,9 +12,17 @@ class ActivityLogWidget extends Component
 
     public ?int $tenantId = null;
 
+    public string $timezone = 'UTC';
+
     public function mount(): void
     {
-        $this->tenantId = filament()?->getTenant()?->id;
+        $tenant = filament()?->getTenant();
+        $this->tenantId = $tenant?->id;
+        $this->timezone = $tenant?->timezone ?? 'UTC';
+
+        if ($this->timezone !== 'UTC') {
+            date_default_timezone_set($this->timezone);
+        }
     }
 
     public function render(): View

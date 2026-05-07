@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Tenant extends Model implements HasName
 {
-    protected $fillable = ['name', 'slug', 'venue_type', 'is_active'];
+    protected $fillable = ['name', 'slug', 'venue_type', 'is_active', 'timezone'];
 
     public function getFilamentName(): string
     {

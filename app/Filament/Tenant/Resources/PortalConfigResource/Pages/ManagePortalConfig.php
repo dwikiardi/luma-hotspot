@@ -43,6 +43,7 @@ class ManagePortalConfig extends Page implements HasForms
             'room_validation_enabled' => $config->room_validation_enabled ?? false,
             'room_validation_mode' => $config->room_validation_mode ?? 'range',
             'room_validation_config' => $config->room_validation_config ?? [],
+            'timezone' => $config->tenant->timezone ?? 'Asia/Jakarta',
         ]);
     }
 
@@ -226,6 +227,37 @@ class ManagePortalConfig extends Page implements HasForms
                             ->helperText('Jumlah device yang bisa login bersamaan'),
                     ])->collapsible(),
 
+                Forms\Components\Section::make('Zona Waktu')
+                    ->description('Waktu lokal venue untuk sinkronisasi jam di dashboard dan log')
+                    ->schema([
+                        Forms\Components\Select::make('timezone')
+                            ->label('Timezone')
+                            ->options([
+                                'UTC' => 'UTC',
+                                'Asia/Jakarta' => 'Asia/Jakarta (WIB +7)',
+                                'Asia/Makassar' => 'Asia/Makassar (WITA +8)',
+                                'Asia/Jayapura' => 'Asia/Jayapura (WIT +9)',
+                                'Asia/Singapore' => 'Asia/Singapore (+8)',
+                                'Asia/Kuala_Lumpur' => 'Asia/Kuala Lumpur (+8)',
+                                'Asia/Bangkok' => 'Asia/Bangkok (+7)',
+                                'Asia/Tokyo' => 'Asia/Tokyo (+9)',
+                                'Asia/Seoul' => 'Asia/Seoul (+9)',
+                                'Asia/Shanghai' => 'Asia/Shanghai (+8)',
+                                'Asia/Dubai' => 'Asia/Dubai (+4)',
+                                'Asia/Riyadh' => 'Asia/Riyadh (+3)',
+                                'Europe/London' => 'Europe/London (+0)',
+                                'Europe/Paris' => 'Europe/Paris (+1/+2)',
+                                'Europe/Berlin' => 'Europe/Berlin (+1/+2)',
+                                'America/New_York' => 'America/New York (-5/-4)',
+                                'America/Chicago' => 'America/Chicago (-6/-5)',
+                                'America/Los_Angeles' => 'America/Los Angeles (-8/-7)',
+                                'Australia/Sydney' => 'Australia/Sydney (+10/+11)',
+                            ])
+                            ->searchable()
+                            ->default('Asia/Jakarta')
+                            ->required(),
+                    ]),
+
                 Forms\Components\Section::make('Grace Period')
                     ->schema([
                         Forms\Components\Toggle::make('grace_period_enabled')
@@ -254,6 +286,12 @@ class ManagePortalConfig extends Page implements HasForms
         $config->update($data);
 
         $tenantId = auth('tenant_users')->user()->tenant_id;
+
+        // Save timezone to tenant
+        if (isset($this->data['timezone'])) {
+            \App\Models\Tenant::where('id', $tenantId)->update(['timezone' => $this->data['timezone']]);
+        }
+
         $timeout = $data['session_timeout'] ?? 0;
         $idleTimeout = $data['idle_timeout'] ?? 0;
         $sharedUsers = $this->data['shared_users'] ?? 3;
