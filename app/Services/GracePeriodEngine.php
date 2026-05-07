@@ -62,6 +62,45 @@ class GracePeriodEngine
             }
         }
 
+        // CNA fallback: kalau gak ada grace session (udah di-reactivate sync),
+        // cek active sessions via user_id uniqueness + latest radacct MAC
+        if ($isCNA && !$hasFingerprint && !$hasCookie && $sessions->isEmpty()) {
+            $activeSessions = UserSession::where('status', 'active')
+                ->where('router_id', $router->id)
+                ->where('expires_at', '>', now())
+                ->get();
+
+            if ($activeSessions->isNotEmpty()) {
+                // Match by MAC dulu (CNA kirim client_mac)
+                if ($hasValidMac) {
+                    $macMatch = $activeSessions->firstWhere('mac_address', $mac);
+                    if ($macMatch) {
+                        return GraceCheckResult::autoLogin($macMatch);
+                    }
+                    // Cek radacct: user mana yg punya MAC ini (sedang connected)
+                    $radUser = \Illuminate\Support\Facades\DB::table('radacct')
+                        ->where('callingstationid', $mac)
+                        ->whereNull('acctstoptime')
+                        ->orderByDesc('acctstarttime')
+                        ->first();
+                    if ($radUser) {
+                        $dbUser = \App\Models\User::where('identity_value', $radUser->username)->first();
+                        if ($dbUser) {
+                            $radSession = $activeSessions->firstWhere('user_id', $dbUser->id);
+                            if ($radSession) {
+                                return GraceCheckResult::autoLogin($radSession);
+                            }
+                        }
+                    }
+                }
+                // Fallback: kalau semua active session user_id-nya sama
+                $activeUniqueUsers = $activeSessions->pluck('user_id')->unique();
+                if ($activeUniqueUsers->count() === 1) {
+                    return GraceCheckResult::autoLogin($activeSessions->first());
+                }
+            }
+        }
+
         // Fallback: no signal, check by user_id uniqueness
         if (!$hasFingerprint && !$hasCookie && $sessions->isNotEmpty()) {
             $uniqueUsers = $sessions->pluck('user_id')->unique();

@@ -177,6 +177,13 @@ Schedule::call(function () {
             $user = \App\Models\User::where('identity_value', $identity)->first();
             if (! $user) continue;
 
+            // Get MAC from radacct
+            $rad = \Illuminate\Support\Facades\DB::table('radacct')
+                ->where('username', $identity)
+                ->orderByDesc('radacctid')
+                ->first();
+            $mac = $rad?->callingstationid ?? 'unknown';
+
             // Reactivate disconnected session jika user masih di MikroTik
             $disconnected = \App\Models\UserSession::where('user_id', $user->id)
                 ->where('router_id', $router->id)
@@ -193,23 +200,32 @@ Schedule::call(function () {
                     'expires_at' => now()->addHours(4),
                     'disconnected_at' => null,
                     'ip_address' => $ip,
+                    'mac_address' => $mac !== 'unknown' ? $mac : $disconnected->mac_address,
                 ]);
                 continue;
             }
 
-            // Skip if already active in DB for this router
-            $exists = \App\Models\UserSession::where('user_id', $user->id)
+            // Update active session jika MAC berubah (user ganti device / rotating MAC)
+            $active = \App\Models\UserSession::where('user_id', $user->id)
                 ->where('router_id', $router->id)
                 ->where('status', 'active')
-                ->exists();
-            if ($exists) continue;
-
-            // Get MAC from radacct
-            $rad = \Illuminate\Support\Facades\DB::table('radacct')
-                ->where('username', $identity)
-                ->orderByDesc('radacctid')
                 ->first();
-            $mac = $rad?->callingstationid ?? 'unknown';
+
+            if ($active) {
+                if ($mac !== 'unknown' && $active->mac_address !== $mac) {
+                    $active->update([
+                        'mac_address' => $mac,
+                        'ip_address' => $ip,
+                        'last_seen_at' => now(),
+                    ]);
+                } else {
+                    $active->update([
+                        'ip_address' => $ip,
+                        'last_seen_at' => now(),
+                    ]);
+                }
+                continue;
+            }
 
             $device = \App\Models\Device::firstOrCreate(
                 ['fingerprint_hash' => 'fp-mk-'.substr(md5($mac), 0, 12)],
