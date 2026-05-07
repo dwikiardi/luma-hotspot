@@ -129,12 +129,12 @@ Schedule::call(function () {
             ->first();
         if (! $user) continue;
 
-        // Hanya disconnect session yg dibuat saat RADIUS session ini berlangsung
-        // (bukan session baru yg dibuat oleh sync setelah reconnect)
+        // Hanya disconnect session yg dibuat di window RADIUS session & older than 60s
         \App\Models\UserSession::where('user_id', $user->id)
             ->where('status', 'active')
             ->where('login_at', '>=', $rec->acctstarttime)
             ->where('login_at', '<', $rec->acctstoptime)
+            ->where('login_at', '<', now()->subSeconds(60)) // buffer 1 menit
             ->update([
                 'status' => 'disconnected',
                 'disconnected_at' => $rec->acctstoptime,
