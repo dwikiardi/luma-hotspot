@@ -74,6 +74,21 @@ class PortalController extends Controller
             ]);
         }
 
+        // iOS CNA Escape: redirect ke .mobileconfig untuk keluar dari CNA ke Safari
+        $isCNA = $this->detectCNA($request->userAgent() ?? '');
+        $isIOS = $this->isIOS($request->userAgent() ?? '');
+        $isBrowser = $request->query('browser') === '1';
+
+        if ($isCNA && !$isBrowser) {
+            $params = http_build_query(array_filter([
+                'nas_id' => $nasId,
+                'client_mac' => $mac !== 'unknown' ? $mac : null,
+                'link_login' => $linkLogin,
+                'dst' => $dstUrl,
+            ]));
+            return redirect('/cna-escape?' . $params);
+        }
+
         // Normal flow — biometric auto-login atau login form
         $this->analytics->track('portal_opened', [
             'tenant_id' => $router->tenant_id,
