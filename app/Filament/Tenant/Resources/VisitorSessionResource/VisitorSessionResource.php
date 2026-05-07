@@ -143,26 +143,31 @@ class VisitorSessionResource extends Resource
                     ->visible(fn ($record) => $record->status === 'active')
                     ->action(function ($record) {
                         $router = $record->router;
-                        if ($router) {
-                            // Disconnect spesifik MAC ini dari MikroTik (active + cookie)
+                        $username = $record->user?->identity_value;
+                        if ($router && $username) {
+                            // 1. Hapus dari MikroTik active + cookie by MAC
                             $svc = app(\App\Services\MikroTikApiService::class);
                             $svc->disconnectByMac($router, $record->mac_address);
 
-                            // Kalau ini device terakhir, disconnect juga by username (cleanup total)
+                            // 2. Kalau ini device terakhir, hapus juga by username
                             $otherActive = UserSession::where('user_id', $record->user_id)
                                 ->where('router_id', $router->id)
                                 ->where('status', 'active')
                                 ->where('id', '!=', $record->id)
                                 ->count();
-                            if ($otherActive === 0 && $record->user?->identity_value) {
-                                $svc->disconnectUser($record->user->identity_value, $router);
+                            if ($otherActive === 0) {
+                                $svc->disconnectUser($username, $router);
                             }
+
+                            // 3. Hapus radcheck → FreeRADIUS rejection → gak bisa reconnect otomatis
+                            \Illuminate\Support\Facades\DB::table('radcheck')
+                                ->where('username', $username)->delete();
                         }
                         $record->update(['status' => 'disconnected', 'disconnected_at' => now()]);
                         \Filament\Notifications\Notification::make()
                             ->success()
-                            ->title("User diputuskan dari hotspot")
-                            ->body("MAC {$record->mac_address} dihapus dari MikroTik active & cookie")
+                            ->title("{$username} diputuskan dari hotspot")
+                            ->body("MAC {$record->mac_address} dihapus. RADIUS credentials dihapus — user harus login lagi via portal.")
                             ->send();
                     })
                     ->requiresConfirmation()
