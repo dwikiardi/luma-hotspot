@@ -123,23 +123,6 @@ class PortalController extends Controller
             }
         }
 
-                if ($theSession->status === 'active') {
-                    $user = User::find($theSession->user_id);
-                    $loginUrl = $this->buildMikroTikLoginUrl(
-                        $router, $user?->identity_value ?? '', $user?->identity_value ?? '',
-                        $linkLogin, $dstUrl
-                    );
-                    return redirect($loginUrl)->withCookie(cookie(
-                        'luma_session', $theSession->cookie_token,
-                        (int) ($theSession->seconds_remaining / 60),
-                        '/', null, false, false, false, 'Lax'
-                    ));
-                }
-
-                return $this->silentAutoLogin($request, $theSession, $router, $linkLogin, $dstUrl, $clientIp);
-            }
-        }
-
         $graceResult = $this->graceEngine->check($request, $router);
 
         // Cek session aktif via MAC (untuk device tanpa cookie seperti sync sessions)
