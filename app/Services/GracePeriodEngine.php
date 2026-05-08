@@ -211,23 +211,26 @@ class GracePeriodEngine
             $existing = \App\Models\DeviceFingerprint::where('fingerprint_hash', $fp)->first();
 
             $fields = array_filter([
-                'visitor_id' => $fpData['visitorId'] ?? null,
-                'canvas_hash' => $fpData['canvas']?->value ?? null,
-                'webgl_hash' => $fpData['webgl']?->value ?? null,
-                'webgl_vendor' => $fpData['webglVendorAndRenderer']?->vendor ?? null,
-                'webgl_renderer' => $fpData['webglVendorAndRenderer']?->renderer ?? null,
-                'fonts_hash' => $fpData['fonts']?->value ?? null,
-                'audio_hash' => $fpData['audio']?->value ?? null,
-                'screen_resolution' => isset($fpData['screenResolution']) ? json_encode($fpData['screenResolution']) : null,
-                'color_depth' => $fpData['colorDepth']?->value ?? null,
-                'device_memory' => $fpData['deviceMemory']?->value ?? null,
-                'hardware_concurrency' => $fpData['hardwareConcurrency']?->value ?? null,
-                'timezone' => $fpData['timezone']?->value ?? null,
-                'languages' => isset($fpData['languages']) ? json_encode($fpData['languages']) : null,
-                'touch_support' => isset($fpData['touchSupport']) ? ($fpData['touchSupport']?->value ?? null) : null,
-                'platform' => $fpData['platform']?->value ?? null,
-                'os_name' => $fpData['osCpu']?->value ?? null,
-                'browser_name' => $fpData['vendor']?->value ?? null,
+                'canvas_hash' => $fpData['canvas']['value'] ?? null,
+                'webgl_hash' => $fpData['webgl']['value'] ?? null,
+                'webgl_vendor' => isset($fpData['webglVendorAndRenderer']['value'])
+                    ? explode('~', $fpData['webglVendorAndRenderer']['value'])[0] ?? null : null,
+                'webgl_renderer' => isset($fpData['webglVendorAndRenderer']['value'])
+                    ? explode('~', $fpData['webglVendorAndRenderer']['value'])[1] ?? null : null,
+                'fonts_hash' => is_array($fpData['fonts']['value'] ?? null) ? md5(implode(',', $fpData['fonts']['value'])) : null,
+                'audio_hash' => $fpData['audio']['value'] ?? null,
+                'screen_resolution' => isset($fpData['screenResolution']['value'])
+                    ? $fpData['screenResolution']['value'][0] . 'x' . $fpData['screenResolution']['value'][1] : null,
+                'color_depth' => $fpData['colorDepth']['value'] ?? null,
+                'device_memory' => $fpData['deviceMemory']['value'] ?? null,
+                'hardware_concurrency' => $fpData['hardwareConcurrency']['value'] ?? null,
+                'timezone' => $fpData['timezone']['value'] ?? null,
+                'languages' => isset($fpData['languages']['value']) ? json_encode($fpData['languages']['value']) : null,
+                'touch_support' => isset($fpData['touchSupport']['value']['maxTouchPoints'])
+                    ? $fpData['touchSupport']['value']['maxTouchPoints'] > 0 : null,
+                'platform' => $fpData['platform']['value'] ?? null,
+                'os_name' => $fpData['osCpu']['value'] ?? null,
+                'browser_name' => $fpData['vendor']['value'] ?? null,
                 'user_agent' => $request->userAgent(),
                 'ip_address' => $request->header('X-Forwarded-For') ?? $request->ip(),
                 'nas_id' => $router->nas_identifier,
