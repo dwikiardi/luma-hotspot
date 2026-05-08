@@ -29,12 +29,7 @@ Route::post('/cna-login', function (\Illuminate\Http\Request $request) {
         return response()->json(['success' => false, 'message' => 'Invalid venue']);
     }
 
-    // Validate room number
-    $config = $router->tenant->portalConfig;
-    if (! \App\Http\Controllers\AuthController::validateRoomStatic($roomNumber, $config)) {
-        return response()->json(['success' => false, 'message' => 'Room number not valid for this venue']);
-    }
-
+    // Create user + session
     $user = \App\Models\User::updateOrCreate(
         ['identity_value' => $roomNumber, 'identity_type' => 'room'],
         ['name' => 'Room ' . $roomNumber]
