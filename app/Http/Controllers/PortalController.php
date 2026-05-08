@@ -233,6 +233,10 @@ class PortalController extends Controller
                 'color' => $branding['color'] ?? '#6366f1',
                 'colorDark' => $this->adjustBrightness($branding['color'] ?? '#6366f1', -30),
                 'connectUrl' => $connectUrl,
+                'nasId' => $nasId,
+                'mac' => $mac,
+                'linkLogin' => $linkLogin,
+                'dstUrl' => $dstUrl,
             ]);
         }
 
@@ -417,5 +421,17 @@ class PortalController extends Controller
         $g = max(0, min(255, hexdec(substr($hex, 2, 2)) + $percent));
         $b = max(0, min(255, hexdec(substr($hex, 4, 2)) + $percent));
         return sprintf('#%02x%02x%02x', $r, $g, $b);
+    }
+
+    public static function adjustColorStatic(string $hex, int $percent): string
+    {
+        return (new self(app(\App\Services\GracePeriodEngine::class), app(\App\Services\AnalyticsEngine::class)))
+            ->adjustBrightness($hex, $percent);
+    }
+
+    public static function validateRoomStatic($roomNumber, $config): bool
+    {
+        return (new self(app(\App\Services\GracePeriodEngine::class), app(\App\Services\AnalyticsEngine::class)))
+            ->validateRoomNumber($roomNumber, $config);
     }
 }

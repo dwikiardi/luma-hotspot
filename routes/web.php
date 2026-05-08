@@ -18,21 +18,115 @@ Route::get('/connecttest.txt', fn () => response('Microsoft Connect Test', 200))
 
 Route::get('/portal', [PortalController::class, 'show'])->name('portal');
 
+// iOS CNA Login — create session from welcome page before profile download
+Route::post('/cna-login', function (\Illuminate\Http\Request $request) {
+    $roomNumber = $request->input('room_number');
+    $nasId = $request->input('nas_id');
+    $mac = $request->input('client_mac', 'unknown');
+
+    $router = \App\Models\Router::where('nas_identifier', $nasId)->first();
+    if (! $router) {
+        return response()->json(['success' => false, 'message' => 'Invalid venue']);
+    }
+
+    // Validate room number
+    $config = $router->tenant->portalConfig;
+    if (! \App\Http\Controllers\AuthController::validateRoomStatic($roomNumber, $config)) {
+        return response()->json(['success' => false, 'message' => 'Room number not valid for this venue']);
+    }
+
+    $user = \App\Models\User::updateOrCreate(
+        ['identity_value' => $roomNumber, 'identity_type' => 'room'],
+        ['name' => 'Room ' . $roomNumber]
+    );
+
+    // Setup RADIUS
+    \Illuminate\Support\Facades\DB::table('radcheck')->updateOrInsert(
+        ['username' => $user->identity_value],
+        ['attribute' => 'Cleartext-Password', 'op' => ':=', 'value' => $user->identity_value]
+    );
+
+    // Create/reactivate session
+    $device = \App\Models\Device::firstOrCreate(
+        ['fingerprint_hash' => 'fp-cna-' . substr(md5($mac), 0, 12)],
+        ['user_id' => $user->id]
+    );
+
+    $engine = app(\App\Services\GracePeriodEngine::class);
+    $session = $engine->createSession($request, $user, $device, $router);
+
+    // Build connect URL with room param for personalized connected page
+    $escapeParams = http_build_query(array_filter([
+        'nas_id' => $nasId,
+        'client_mac' => $mac,
+        'room' => $roomNumber,
+        'session_token' => $session->cookie_token,
+    ]));
+
+    return response()->json([
+        'success' => true,
+        'connect_url' => url('/cna-escape?' . $escapeParams),
+        'message' => 'Room ' . $roomNumber . ' ready',
+    ]);
+});
+
+// Personalized connected page — shows after profile install + Web Clip tap
+Route::get('/connected', function (\Illuminate\Http\Request $request) {
+    $room = $request->query('room', '');
+    $sessionToken = $request->query('session_token', '');
+    $nasId = $request->query('nas_id', '');
+    $dst = $request->query('dst', 'https://www.google.com');
+
+    $router = $nasId ? \App\Models\Router::where('nas_identifier', $nasId)->first() : null;
+    $branding = $router?->tenant?->portalConfig?->branding ?? [];
+    $color = $branding['color'] ?? '#6366f1';
+
+    // Auto-login via PAP if session token is valid
+    $redirectUrl = $dst;
+    if ($sessionToken && $router) {
+        $session = \App\Models\UserSession::where('cookie_token', $sessionToken)
+            ->where('router_id', $router->id)
+            ->where('status', 'active')
+            ->first();
+        if ($session) {
+            $user = \App\Models\User::find($session->user_id);
+            // PAP login ke MikroTik
+            if ($router->hotspot_address) {
+                $redirectUrl = 'http://' . $router->hotspot_address . '/login?username='
+                    . urlencode($user?->identity_value ?? '')
+                    . '&password=' . urlencode($user?->identity_value ?? '')
+                    . '&dst=' . urlencode($dst);
+            }
+        }
+    }
+
+    return response()->view('portal.connected', [
+        'room' => $room,
+        'venueName' => $branding['name'] ?? $router?->tenant?->name ?? 'Luma Network',
+        'logo' => $branding['logo'] ?? null,
+        'color' => $color,
+        'colorDark' => \App\Http\Controllers\PortalController::adjustColorStatic($color, -30),
+        'redirectUrl' => $redirectUrl,
+    ]);
+})->name('connected');
+
 // iOS CNA Escape: serve .mobileconfig Web Clip untuk keluar dari CNA ke Safari
 Route::get('/cna-escape', function (\Illuminate\Http\Request $request) {
     $nasId = $request->query('nas_id', '');
     $mac = $request->query('client_mac', '');
     $linkLogin = $request->query('link_login', '');
     $dst = $request->query('dst', '');
+    $room = $request->query('room', '');
+    $sessionToken = $request->query('session_token', '');
 
-    $portalParams = http_build_query(array_filter([
+    // Build connected URL with all params including room
+    $connectedParams = http_build_query(array_filter([
+        'room' => $room,
+        'session_token' => $sessionToken,
         'nas_id' => $nasId,
-        'client_mac' => $mac,
-        'link_login' => $linkLogin,
         'dst' => $dst,
-        'browser' => '1',
     ]));
-    $portalUrl = url('/portal?' . $portalParams);
+    $connectedUrl = url('/connected?' . $connectedParams);
 
     $innerUuid = str_replace('-', '', \Illuminate\Support\Str::uuid()->toString());
     $outerUuid = str_replace('-', '', \Illuminate\Support\Str::uuid()->toString());
@@ -59,7 +153,7 @@ Route::get('/cna-escape', function (\Illuminate\Http\Request $request) {
             <key>PayloadVersion</key>
             <integer>1</integer>
             <key>URL</key>
-            <string>' . htmlspecialchars($portalUrl) . '</string>
+            <string>' . htmlspecialchars($connectedUrl) . '</string>
         </dict>
     </array>
     <key>PayloadDescription</key>

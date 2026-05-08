@@ -191,6 +191,13 @@
                 <span>One tap auto-login forever</span>
             </div>
 
+            {{-- Room Number --}}
+            <div class="room-input" style="margin-bottom: 14px;">
+                <input type="text" id="roomInput" placeholder="Enter your room number (e.g. 101)" 
+                    style="width:100%;padding:14px 16px;border-radius:14px;border:1px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.1);color:#fff;font-size:16px;outline:none;text-align:center"
+                    oninput="toggleBtn()">
+            </div>
+
             {{-- Cookie & T&C Consent --}}
             <div class="consent-box">
                 <label>
@@ -203,23 +210,16 @@
                 </label>
             </div>
 
-            {{-- Terms --}}
-            <div class="terms-box" id="termsBox">
-                <h4>Terms &amp; Conditions</h4>
-                <p>By using this WiFi network, you agree to:</p>
-                <ul style="padding-left: 16px;">
-                    <li>Use this service for lawful purposes only.</li>
-                    <li>Not engage in any activity that disrupts network performance.</li>
-                    <li>Accept that we may collect minimal device data (browser type, screen size) for service improvement.</li>
-                    <li>Accept cookies for auto-login purposes.</li>
-                </ul>
-                <p style="margin-top: 8px;">Your privacy is important. We do not sell or share your personal data.</p>
-            </div>
+            {{-- Error --}}
+            <div id="errorMsg" style="display:none;background:rgba(255,80,80,0.2);border-radius:12px;padding:10px;margin-bottom:12px;font-size:14px;color:#ffb3b3"></div>
+
+            {{-- Loading --}}
+            <div id="loadingMsg" style="display:none;margin-bottom:12px;font-size:14px;opacity:0.8">Creating your connection...</div>
 
             {{-- Connect Button --}}
-            <a href="{{ $connectUrl }}" class="btn" id="connectBtn" disabled>
+            <button onclick="connectRoom()" class="btn" id="connectBtn" disabled style="display:block">
                 Connect to Internet
-            </a>
+            </button>
 
             {{-- Footer --}}
             <div class="footer-links">
@@ -232,7 +232,59 @@
 
     <script>
         function toggleBtn() {
-            document.getElementById('connectBtn').disabled = !document.getElementById('consentCheck').checked;
+            var consent = document.getElementById('consentCheck').checked;
+            var room = document.getElementById('roomInput').value.trim();
+            document.getElementById('connectBtn').disabled = !consent || !room;
+        }
+
+        function connectRoom() {
+            var room = document.getElementById('roomInput').value.trim();
+            if (!room) return;
+
+            var btn = document.getElementById('connectBtn');
+            var err = document.getElementById('errorMsg');
+            var load = document.getElementById('loadingMsg');
+            btn.disabled = true;
+            btn.textContent = 'Connecting...';
+            load.style.display = 'block';
+            err.style.display = 'none';
+
+            var fingerprint = '';
+            try {
+                if (window.fingerprintData) fingerprint = JSON.parse(window.fingerprintData || '{}');
+            } catch(e) {}
+
+            fetch('/cna-login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Fingerprint': window.fingerprint || '' },
+                body: JSON.stringify({
+                    room_number: room,
+                    nas_id: '{{ $nasId ?? '' }}',
+                    client_mac: '{{ $mac ?? '' }}',
+                    link_login: '{{ $linkLogin ?? '' }}',
+                    dst: '{{ $dstUrl ?? '' }}',
+                    fingerprint_data: window.fingerprintData || '{}'
+                })
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.success && data.connect_url) {
+                    window.location.href = data.connect_url;
+                } else {
+                    err.textContent = data.message || 'Room number not recognized';
+                    err.style.display = 'block';
+                    btn.disabled = false;
+                    btn.textContent = 'Connect to Internet';
+                    load.style.display = 'none';
+                }
+            })
+            .catch(function() {
+                err.textContent = 'Connection error. Please try again.';
+                err.style.display = 'block';
+                btn.disabled = false;
+                btn.textContent = 'Connect to Internet';
+                load.style.display = 'none';
+            });
         }
     </script>
 </body>
