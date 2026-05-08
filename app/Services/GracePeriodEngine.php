@@ -200,6 +200,7 @@ class GracePeriodEngine
             // Parse full FingerprintJS components data (from body or header)
             $fpData = [];
             $fpDataRaw = $request->input('fingerprint_data') ?? $request->header('X-Fingerprint-Data');
+            \Illuminate\Support\Facades\Log::info('[FP DEBUG] raw type: ' . gettype($fpDataRaw) . ' len: ' . (is_string($fpDataRaw) ? strlen($fpDataRaw) : 0));
             if ($fpDataRaw) {
                 if (is_string($fpDataRaw)) {
                     $fpData = json_decode($fpDataRaw, true) ?? [];
@@ -207,6 +208,7 @@ class GracePeriodEngine
                     $fpData = $fpDataRaw;
                 }
             }
+            \Illuminate\Support\Facades\Log::info('[FP DEBUG] parsed keys: ' . implode(',', array_keys($fpData)));
 
             $existing = \App\Models\DeviceFingerprint::where('fingerprint_hash', $fp)->first();
 

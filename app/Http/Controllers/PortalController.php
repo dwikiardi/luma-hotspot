@@ -217,7 +217,7 @@ class PortalController extends Controller
             return $this->silentAutoLogin($request, $session, $router, $linkLogin, $dstUrl, $clientIp);
         }
 
-        // All auto-login failed → CNA escape or login form
+        // All auto-login failed → CNA welcome page or login form
         if ($isCNA && !$isBrowser) {
             $params = http_build_query(array_filter([
                 'nas_id' => $nasId,
@@ -225,7 +225,15 @@ class PortalController extends Controller
                 'link_login' => $linkLogin,
                 'dst' => $dstUrl,
             ]));
-            return redirect('/cna-escape?' . $params);
+            $connectUrl = url('/cna-escape?' . $params);
+            $branding = $router->tenant->portalConfig->branding ?? [];
+            return view('portal.welcome', [
+                'venueName' => $branding['name'] ?? $router->tenant->name ?? 'Luma Network',
+                'logo' => $branding['logo'] ?? null,
+                'color' => $branding['color'] ?? '#6366f1',
+                'colorDark' => $this->adjustBrightness($branding['color'] ?? '#6366f1', -30),
+                'connectUrl' => $connectUrl,
+            ]);
         }
 
         \App\Services\ActivityLogger::portalLoginForm('no active session & no grace match');
@@ -397,5 +405,17 @@ class PortalController extends Controller
             'circuit_id' => $relay['circuit_id'],
             'timestamp' => now()->timestamp,
         ];
+    }
+
+    private function adjustBrightness(string $hex, int $percent): string
+    {
+        $hex = ltrim($hex, '#');
+        if (strlen($hex) === 3) {
+            $hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
+        }
+        $r = max(0, min(255, hexdec(substr($hex, 0, 2)) + $percent));
+        $g = max(0, min(255, hexdec(substr($hex, 2, 2)) + $percent));
+        $b = max(0, min(255, hexdec(substr($hex, 4, 2)) + $percent));
+        return sprintf('#%02x%02x%02x', $r, $g, $b);
     }
 }
