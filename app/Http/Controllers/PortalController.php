@@ -22,6 +22,7 @@ class PortalController extends Controller
         $mac = $request->query('client_mac') ?? $request->query('mac') ?? $request->query('callingstationid') ?? 'unknown';
         $linkLogin = $request->query('link_login');
         $dstUrl = $request->query('dst') ?? $request->query('redirect') ?? 'https://www.google.com';
+        if (empty($dstUrl)) $dstUrl = 'https://www.google.com'; // Fix: dst bisa empty string (bukan null)
 
         // Get real client IP from various sources (never empty string)
         $clientIp = $request->query('ip') 
