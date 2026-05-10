@@ -122,7 +122,26 @@ Schedule::call(function () {
             ->first();
         if (! $user) continue;
 
-        // Dapatkan grace period dari session's router's tenant
+        // Cek apakah user masih ACTIVE di MikroTik
+        // Kalau masih ada → skip disconnect (false positive, signal putus bentar)
+        try {
+            $svc = app(\App\Services\MikroTikApiService::class);
+            $router = \App\Models\Router::where('is_active', true)->where('nas_identifier', 'eden-canggu')->first();
+            if ($router) {
+                $mkUsers = $svc->getActiveUsers($router);
+                $stillOnMikrotik = collect($mkUsers)->contains('user', $rec->username);
+                if ($stillOnMikrotik) {
+                    \App\Services\ActivityLogger::log('scheduler', 'disconnect_skip',
+                        "Skip disconnect: {$rec->username} masih aktif di MikroTik"
+                    );
+                    continue;
+                }
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('MikroTik check failed', ['error' => $e->getMessage()]);
+        }
+
+        // Cari session active untuk user ini
         $session = \App\Models\UserSession::where('user_id', $user->id)
             ->where('status', 'active')
             ->where('login_at', '<', now()->subSeconds(60))
