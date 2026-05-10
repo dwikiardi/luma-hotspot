@@ -209,8 +209,15 @@ class ManagePortalConfig extends Page implements HasForms
                         Forms\Components\TextInput::make('session_timeout')
                             ->label('Session Timeout')
                             ->nullable()
-                            ->default('0')
-                            ->helperText('Format MikroTik: 10m, 2h, 1d, atau detik. 0 = tanpa batas.'),
+                            ->placeholder('Kosongkan atau 0 = default 24 jam')
+                            ->default('24h')
+                            ->helperText('Format: 30m, 2h, 1d, atau detik. Kosongkan untuk default 24 jam.'),
+                        Forms\Components\TextInput::make('idle_timeout')
+                            ->label('Idle Timeout')
+                            ->nullable()
+                            ->placeholder('Kosongkan = tidak ada batas')
+                            ->default(null)
+                            ->helperText('Format: 10m, 2h, 1d, atau detik. Kosongkan untuk tanpa batas.'),
 
                         Forms\Components\TextInput::make('idle_timeout')
                             ->label('Idle Timeout')
