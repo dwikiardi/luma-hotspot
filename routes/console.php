@@ -241,7 +241,7 @@ Schedule::call(function () {
                 if ($session->status === 'disconnected') {
                     $updates['status'] = 'active';
                     $updates['login_at'] = now();
-                    $updates['expires_at'] = now()->addHours(24);
+                    $updates['expires_at'] = now()->addHours(24 * 365);
                     $updates['disconnected_at'] = null;
                 }
                 if ($mac !== 'unknown' && $session->mac_address !== $mac) {
@@ -267,7 +267,7 @@ Schedule::call(function () {
                         'ip_address' => $ip,
                         'login_at' => now(),
                         'last_seen_at' => now(),
-                        'expires_at' => now()->addHours(24),
+                        'expires_at' => now()->addHours(24 * 365),
                         'status' => 'active',
                         'nas_id' => $router->nas_identifier,
                         'login_method' => 'room',
