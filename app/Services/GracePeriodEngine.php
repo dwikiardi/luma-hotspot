@@ -85,7 +85,7 @@ class GracePeriodEngine
         if ($ip && $session->ip_address === $ip) $score += 2;
         if ($ip && $session->ip_address === $ip && $session->nas_id === $nasId) $score += 1;
 
-        if ($score >= 4) {
+        if ($score >= 3) {
             \App\Services\ActivityLogger::graceAutoLogin(
                 User::find($session->user_id)?->identity_value ?? '?',
                 $session->id, $session->mac_address, $session->ip_address ?? '?'

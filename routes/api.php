@@ -21,8 +21,16 @@ Route::post('/dhcp-hook', function (Request $request) {
     $hostname = $request->input('host', '');
     $dhcpServer = $request->input('server', '');
 
-    // Map DHCP server to router by matching hostname or IP range
-    $router = Router::where('is_active', true)->first();
+    // Cari router dari session by MAC, fallback ke default
+    $router = null;
+    if ($mac && $mac !== 'unknown') {
+        $router = \App\Models\UserSession::where('mac_address', $mac)
+            ->where('status', 'active')
+            ->first()?->router;
+    }
+    if (! $router) {
+        $router = Router::where('nas_identifier', 'eden-canggu')->first();
+    }
 
     if ($router) {
         PendingConnection::create([
