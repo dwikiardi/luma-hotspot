@@ -71,6 +71,7 @@ Route::get('/connected', function (\Illuminate\Http\Request $request) {
     $sessionToken = $request->query('session_token', '');
     $nasId = $request->query('nas_id', '');
     $dst = $request->query('dst', 'https://www.google.com');
+    if (empty($dst)) $dst = 'https://www.google.com';
 
     $router = $nasId ? \App\Models\Router::where('nas_identifier', $nasId)->first() : null;
     $branding = $router?->tenant?->portalConfig?->branding ?? [];
@@ -112,6 +113,7 @@ Route::get('/cna-escape', function (\Illuminate\Http\Request $request) {
     $mac = $request->query('client_mac', '');
     $linkLogin = $request->query('link_login', '');
     $dst = $request->query('dst', '');
+    if (empty($dst)) $dst = 'https://www.google.com';
     $room = $request->query('room', '');
     $sessionToken = $request->query('session_token', '');
 
