@@ -217,13 +217,7 @@ class ManagePortalConfig extends Page implements HasForms
                             ->nullable()
                             ->placeholder('Kosongkan = tidak ada batas')
                             ->default(null)
-                            ->helperText('Format: 10m, 2h, 1d, atau detik. Kosongkan untuk tanpa batas.'),
-
-                        Forms\Components\TextInput::make('idle_timeout')
-                            ->label('Idle Timeout')
-                            ->nullable()
-                            ->default('0')
-                            ->helperText('Format MikroTik: 10m, 2h, 1d, atau detik. 0 = tanpa batas.'),
+                             ->helperText('Format: 10m, 2h, 1d, atau detik. Kosongkan untuk tanpa batas.'),
 
                         Forms\Components\TextInput::make('shared_users')
                             ->label('Shared Users')
