@@ -75,29 +75,15 @@ Route::get('/connected', function (\Illuminate\Http\Request $request) {
     $router = $nasId ? \App\Models\Router::where('nas_identifier', $nasId)->first() : null;
     $branding = $router?->tenant?->portalConfig?->branding ?? [];
     $color = $branding['color'] ?? '#6366f1';
+    $venueName = $branding['name'] ?? $router?->tenant?->name ?? 'Luma Network';
 
-    // Auto-login via PAP if session token is valid
+    // Option B: langsung ke dst — skip PAP login (user sudah authorized dari sync)
+    // Gak perlu redirect ke MikroTik login lagi, cukup ke google/dst asli
     $redirectUrl = $dst;
-    if ($sessionToken && $router) {
-        $session = \App\Models\UserSession::where('cookie_token', $sessionToken)
-            ->where('router_id', $router->id)
-            ->where('status', 'active')
-            ->first();
-        if ($session) {
-            $user = \App\Models\User::find($session->user_id);
-            // PAP login ke MikroTik
-            if ($router->hotspot_address) {
-                $redirectUrl = 'http://' . $router->hotspot_address . '/login?username='
-                    . urlencode($user?->identity_value ?? '')
-                    . '&password=' . urlencode($user?->identity_value ?? '')
-                    . '&dst=' . urlencode($dst);
-            }
-        }
-    }
 
     return response()->view('portal.connected', [
         'room' => $room,
-        'venueName' => $branding['name'] ?? $router?->tenant?->name ?? 'Luma Network',
+        'venueName' => $venueName,
         'logo' => $branding['logo'] ?? null,
         'color' => $color,
         'colorDark' => \App\Http\Controllers\PortalController::adjustColorStatic($color, -30),

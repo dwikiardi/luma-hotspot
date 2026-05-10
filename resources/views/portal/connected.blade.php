@@ -74,11 +74,14 @@
 <body>
     <div class="container">
         <div class="card">
-            @if($logo)
             <div class="logo-wrap">
-                <img src="{{ $logo }}" alt="Logo" onerror="this.remove()">
+                @if($logo)
+                    <img src="{{ $logo }}" alt="Logo" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+                    <svg viewBox="0 0 24 24" style="display:none"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C17.93 4.07 6.07 4.07 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-6-6l2 2c2.76-2.76 7.24-2.76 10 0l2-2C13.14 7.14 5.86 7.14 3 11z"/></svg>
+                @else
+                    <svg viewBox="0 0 24 24"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C17.93 4.07 6.07 4.07 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-6-6l2 2c2.76-2.76 7.24-2.76 10 0l2-2C13.14 7.14 5.86 7.14 3 11z"/></svg>
+                @endif
             </div>
-            @endif
             <div class="venue-name">{{ $venueName }}</div>
 
             <div class="check-icon">
