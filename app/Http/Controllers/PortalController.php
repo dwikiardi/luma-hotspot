@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\DhcpFingerprint;
 use App\Models\Router;
 use App\Models\User;
 use App\Models\UserSession;
@@ -11,6 +12,21 @@ use Illuminate\Http\Request;
 
 class PortalController extends Controller
 {
+    public static function sanitizeDst(?string $dst, string $default = 'https://www.google.com'): string
+    {
+        if (empty($dst)) return $default;
+        $cnaProbes = [
+            'captive.apple.com',
+            'connectivitycheck.gstatic.com',
+            'connectivitycheck.android.com',
+            'clients3.google.com/generate_204',
+        ];
+        foreach ($cnaProbes as $probe) {
+            if (str_contains($dst, $probe)) return $default;
+        }
+        return $dst;
+    }
+
     public function __construct(
         private GracePeriodEngine $graceEngine,
         private AnalyticsEngine $analytics
@@ -21,8 +37,7 @@ class PortalController extends Controller
         $nasId = $request->query('nas_id');
         $mac = $request->query('client_mac') ?? $request->query('mac') ?? $request->query('callingstationid') ?? 'unknown';
         $linkLogin = $request->query('link_login');
-        $dstUrl = $request->query('dst') ?? $request->query('redirect') ?? 'https://www.google.com';
-        if (empty($dstUrl)) $dstUrl = 'https://www.google.com'; // Fix: dst bisa empty string (bukan null)
+        $dstUrl = self::sanitizeDst($request->query('dst') ?? $request->query('redirect'));
 
         // Get real client IP from various sources (never empty string)
         $clientIp = $request->query('ip') 
@@ -47,7 +62,7 @@ class PortalController extends Controller
                 'customLoginLabel' => 'Nomor Kamar',
                 'customLoginPlaceholder' => 'Contoh: 101',
                 'linkLogin' => null,
-                'dstUrl' => 'https://www.google.com',
+                'dstUrl' => self::sanitizeDst(null),
             ]);
         }
 
@@ -89,71 +104,41 @@ class PortalController extends Controller
 
         \App\Services\ActivityLogger::portalOpened($mac, $clientIp ?? 'unknown', $this->detectCNA($request->userAgent() ?? ''));
 
-        // Pre-check: pending DHCP connection → device baru connect
-        $pending = \App\Models\PendingConnection::where('router_id', $router->id)
-            ->where('created_at', '>', now()->subMinutes(2))
-            ->latest()
-            ->first();
-
-        if ($pending) {
-            $theSession = UserSession::where('router_id', $router->id)
-                ->whereIn('status', ['active', 'disconnected'])
-                ->where('expires_at', '>', now())
-                ->first();
-
-            if ($theSession) {
-                \App\Services\ActivityLogger::log('dhcp_hook', 'pre_auth',
-                    "Pre-auth via DHCP: MAC={$mac} → session {$theSession->id}",
-                    ['mac' => $mac, 'session_id' => $theSession->id]
-                );
-
-                if ($theSession->status === 'active') {
-                    $user = User::find($theSession->user_id);
-                    $loginUrl = $this->buildMikroTikLoginUrl(
-                        $router, $user?->identity_value ?? '', $user?->identity_value ?? '',
-                        $linkLogin, $dstUrl
-                    );
-                    return redirect($loginUrl)->withCookie(cookie(
-                        'luma_session', $theSession->cookie_token,
-                        (int) ($theSession->seconds_remaining / 60),
-                        '/', null, false, false, false, 'Lax'
-                    ));
-                }
-
-                return $this->silentAutoLogin($request, $theSession, $router, $linkLogin, $dstUrl, $clientIp);
-            }
-        }
+        $tenantRouterIds = \App\Models\Router::where('tenant_id', $router->tenant_id)->pluck('id')->toArray();
 
         $graceResult = $this->graceEngine->check($request, $router);
 
-        // Cek session aktif via MAC (untuk device tanpa cookie seperti sync sessions)
-        $activeSession = null;
-        if ($mac && $mac !== 'unknown') {
+        // Tier 0: Device DNA — kenali device bahkan dengan MAC baru (private MAC randomization)
+        // Cari dari DHCP fingerprint yang sudah direcord di dhcp-hook, cross-MAC
+        $activeSession = $this->resolveByDeviceDna($mac, $tenantRouterIds);
+
+        // Tier 1: MAC address lookup
+        if (! $activeSession && $mac && $mac !== 'unknown') {
             $activeSession = UserSession::where('mac_address', $mac)
-                ->where('router_id', $router->id)
+                ->whereIn('router_id', $tenantRouterIds)
                 ->where('status', 'active')
                 ->where('expires_at', '>', now())
                 ->first();
         }
 
-        // MAC gak match? Cek via cookie (device ganti MAC tapi cookie masih ada)
+        // Tier 2: Cookie token
         if (! $activeSession) {
             $cookie = $request->cookie('luma_session');
             $activeSession = $cookie
                 ? UserSession::where('cookie_token', $cookie)
-                    ->where('router_id', $router->id)
+                    ->whereIn('router_id', $tenantRouterIds)
                     ->where('status', 'active')
                     ->where('expires_at', '>', now())
                     ->first()
                 : null;
         }
 
-        // Cookie juga gak match? Cek via fingerprint
+        // Tier 3: JS browser fingerprint
         if (! $activeSession) {
             $fp = $request->header('X-Fingerprint') ?? $request->query('fingerprint');
             $activeSession = $fp
                 ? UserSession::where('fingerprint_hash', $fp)
-                    ->where('router_id', $router->id)
+                    ->whereIn('router_id', $tenantRouterIds)
                     ->where('status', 'active')
                     ->where('expires_at', '>', now())
                     ->first()
@@ -162,6 +147,26 @@ class PortalController extends Controller
 
         if ($activeSession) {
             $user = User::find($activeSession->user_id);
+            if ($user && empty($activeSession->username)) {
+                $activeSession->update(['username' => $user->identity_value]);
+            }
+
+            $otherActiveDevices = UserSession::where('user_id', $activeSession->user_id)
+                ->where('router_id', $router->id)
+                ->where('status', 'active')
+                ->where('id', '!=', $activeSession->id)
+                ->count();
+            if ($otherActiveDevices === 0) {
+                try {
+                    app(\App\Services\MikroTikApiService::class)->disconnectUser(
+                        $user?->identity_value ?? '',
+                        $router
+                    );
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::warning('MikroTik pre-disconnect failed', ['error' => $e->getMessage()]);
+                }
+            }
+
             \App\Services\ActivityLogger::portalActiveRedirect(
                 $user?->identity_value ?? '?',
                 $mac
@@ -193,6 +198,26 @@ class PortalController extends Controller
 
             if ($session->status === 'active') {
                 $user = User::find($session->user_id);
+                if ($user && empty($session->username)) {
+                    $session->update(['username' => $user->identity_value]);
+                }
+
+                $otherActiveDevices = UserSession::where('user_id', $session->user_id)
+                    ->where('router_id', $router->id)
+                    ->where('status', 'active')
+                    ->where('id', '!=', $session->id)
+                    ->count();
+                if ($otherActiveDevices === 0) {
+                    try {
+                        app(\App\Services\MikroTikApiService::class)->disconnectUser(
+                            $user?->identity_value ?? '',
+                            $router
+                        );
+                    } catch (\Throwable $e) {
+                        \Illuminate\Support\Facades\Log::warning('MikroTik pre-disconnect failed', ['error' => $e->getMessage()]);
+                    }
+                }
+
                 $loginUrl = $this->buildMikroTikLoginUrl(
                     $router,
                     $user?->identity_value ?? '',
@@ -220,20 +245,12 @@ class PortalController extends Controller
 
         // All auto-login failed → CNA welcome page or login form
         if ($isCNA && !$isBrowser) {
-            $params = http_build_query(array_filter([
-                'nas_id' => $nasId,
-                'client_mac' => $mac !== 'unknown' ? $mac : null,
-                'link_login' => $linkLogin,
-                'dst' => $dstUrl,
-            ]));
-            $connectUrl = url('/cna-escape?' . $params);
             $branding = $router->tenant->portalConfig->branding ?? [];
             return view('portal.welcome', [
                 'venueName' => $branding['name'] ?? $router->tenant->name ?? 'Luma Network',
                 'logo' => $branding['logo'] ?? null,
                 'color' => $branding['color'] ?? '#6366f1',
                 'colorDark' => $this->adjustBrightness($branding['color'] ?? '#6366f1', -30),
-                'connectUrl' => $connectUrl,
                 'nasId' => $nasId,
                 'mac' => $mac,
                 'linkLogin' => $linkLogin,
@@ -287,8 +304,11 @@ class PortalController extends Controller
             return redirect($dstUrl);
         }
 
+        $username = $user->identity_value;
+
         $session->update([
             'status' => 'active',
+            'username' => $username,
             'login_at' => now(),
             'last_seen_at' => now(),
             'expires_at' => now()->addSeconds(
@@ -298,8 +318,6 @@ class PortalController extends Controller
             ),
             'disconnected_at' => null,
         ]);
-
-        $username = $user->identity_value;
         $password = $user->identity_value;
 
         \App\Services\ActivityLogger::portalSilentLogin($username, $session->mac_address, $clientIp ?? 'unknown');
@@ -344,7 +362,43 @@ class PortalController extends Controller
             ));
     }
 
-    private function buildMikroTikLoginUrl(Router $router, string $username, string $password, ?string $linkLogin, string $dstUrl): string
+    /**
+     * Tier 0: Device DNA lookup — kenali device dari DHCP fingerprint meskipun MAC berganti.
+     * Cari fingerprint terbaru untuk MAC ini, cari DNA profile, lalu cari session user.
+     */
+    private function resolveByDeviceDna(string $mac, array $tenantRouterIds): ?\App\Models\UserSession
+    {
+        if ($mac === 'unknown') return null;
+
+        $latestFp = DhcpFingerprint::where('mac_address', $mac)
+            ->whereNotNull('fingerprint_hash')
+            ->latest('detected_at')
+            ->first();
+
+        if (!$latestFp) return null;
+
+        $dnaService = app(\App\Services\DeviceDnaService::class);
+        $user = $dnaService->resolveIdentity(
+            $mac,
+            $latestFp->fingerprint_hash,
+            $latestFp->hostname
+        );
+
+        if (!$user) return null;
+
+        $session = $dnaService->findActiveSessionForUser($user, \App\Models\Router::find($tenantRouterIds[0] ?? 0));
+
+        if ($session) {
+            \App\Services\ActivityLogger::log('device_dna', 'auto_login',
+                "Device DNA auto-login: MAC={$mac} user={$user->identity_value} session={$session->id}",
+                ['mac' => $mac, 'user_id' => $user->id, 'session_id' => $session->id]
+            );
+        }
+
+        return $session;
+    }
+
+    public function buildMikroTikLoginUrl(Router $router, string $username, string $password, ?string $linkLogin, string $dstUrl): string
     {
         if ($linkLogin) {
             $separator = str_contains($linkLogin, '?') ? '&' : '?';

@@ -17,18 +17,28 @@ class MikroTikApiService
     public function disconnectUser(string $username, Router $router): void
     {
         $mikrotikIp = $this->getMikroTikIp($router);
-        $escapedUsername = escapeshellarg($username);
-        $escapedIp = escapeshellarg($mikrotikIp);
+        $username = addslashes($username);
+        $mikrotikIp = addslashes($mikrotikIp);
 
         $script = <<<PYEOF
 from routeros_api import RouterOsApiPool
-pool = RouterOsApiPool({$escapedIp}, username="admin", password="", plaintext_login=True, use_ssl=False)
+pool = RouterOsApiPool("{$mikrotikIp}", username="admin", password="", plaintext_login=True, use_ssl=False)
 api = pool.get_api()
+
+def _rid(raw):
+    if isinstance(raw, dict):
+        return str(raw.get(".id") or raw.get("id") or raw)
+    return str(raw)
+
 active = api.get_resource("/ip/hotspot/active")
 for e in active.get():
-    if e.get("user") == {$escapedUsername}:
-        rid = e.get(".id") or e.get("id")
-        active.call("remove", {{".id": rid}})
+    if e.get("user") == "{$username}":
+        rid = _rid(e.get(".id") or e.get("id"))
+        try:
+            active.call("remove", {{".id": rid}})
+        except Exception:
+            pass
+
 pool.disconnect()
 print("done")
 PYEOF;
@@ -45,29 +55,36 @@ PYEOF;
         if ($mac === 'unknown') return;
 
         $mikrotikIp = $this->getMikroTikIp($router);
-        $escapedIp = escapeshellarg($mikrotikIp);
-        $escapedMac = escapeshellarg(strtoupper($mac));
+        $mac = addslashes(strtoupper($mac));
+        $mikrotikIp = addslashes($mikrotikIp);
 
         $script = <<<PYEOF
 from routeros_api import RouterOsApiPool
-pool = RouterOsApiPool({$escapedIp}, username="admin", password="", plaintext_login=True, use_ssl=False)
+pool = RouterOsApiPool("{$mikrotikIp}", username="admin", password="", plaintext_login=True, use_ssl=False)
 api = pool.get_api()
 
-# Hapus dari hotspot active by MAC
+def _rid(raw):
+    if isinstance(raw, dict):
+        return str(raw.get(".id") or raw.get("id") or raw)
+    return str(raw)
+
 active = api.get_resource("/ip/hotspot/active")
 for e in active.get():
-    if e.get("mac-address","").upper() == {$escapedMac}:
-        rid = e.get(".id") or e.get("id")
-        active.call("remove", {{".id": rid}})
-        print("removed-active")
+    if e.get("mac-address","").upper() == "{$mac}":
+        rid = _rid(e.get(".id") or e.get("id"))
+        try:
+            active.call("remove", {{".id": rid}})
+        except Exception:
+            pass
 
-# Hapus cookie untuk MAC ini
 ck = api.get_resource("/ip/hotspot/cookie")
 for c in ck.get():
-    if c.get("mac-address","").upper() == {$escapedMac}:
-        rid = c.get(".id") or c.get("id")
-        ck.call("remove", {{".id": rid}})
-        print("removed-cookie")
+    if c.get("mac-address","").upper() == "{$mac}":
+        rid = _rid(c.get(".id") or c.get("id"))
+        try:
+            ck.call("remove", {{".id": rid}})
+        except Exception:
+            pass
 
 pool.disconnect()
 print("done")
@@ -105,16 +122,22 @@ PYEOF;
     public function setHotspotConfig(Router $router, int $sessionTimeout, int $idleTimeout, int $sharedUsers): void
     {
         $mikrotikIp = $this->getMikroTikIp($router);
-        $escapedIp = escapeshellarg($mikrotikIp);
-        $jumpHost = escapeshellarg($this->jumpHost);
+        $mikrotikIp = addslashes($mikrotikIp);
+        $sharedUsers = (int)$sharedUsers;
 
         $script = <<<PYEOF
 from routeros_api import RouterOsApiPool
-pool = RouterOsApiPool({$escapedIp}, username="admin", password="", plaintext_login=True, use_ssl=False)
+pool = RouterOsApiPool("{$mikrotikIp}", username="admin", password="", plaintext_login=True, use_ssl=False)
 api = pool.get_api()
+
+def _rid(raw):
+    if isinstance(raw, dict):
+        return str(raw.get(".id") or raw.get("id") or raw)
+    return str(raw)
+
 up = api.get_resource("/ip/hotspot/user/profile")
 for p in up.get():
-    rid = p.get(".id") or p.get("id")
+    rid = _rid(p.get(".id") or p.get("id"))
     up.call("set", {{"shared-users": "{$sharedUsers}", "keepalive-timeout": "none", "idle-timeout": "none", ".id": rid}})
 pool.disconnect()
 print("done")
@@ -197,6 +220,45 @@ PYEOF;
         $this->execPython($script);
     }
 
+    /**
+     * Poll DHCP leases from MikroTik untuk Device DNA capture.
+     * Returns array of [mac, ip, hostname, client_id, server]
+     */
+    public function getDhcpLeases(Router $router): array
+    {
+        $mikrotikIp = $this->getMikroTikIp($router);
+        $escapedIp = escapeshellarg($mikrotikIp);
+
+        $script = <<<PYEOF
+from routeros_api import RouterOsApiPool
+pool = RouterOsApiPool({$escapedIp}, username="admin", password="", plaintext_login=True, use_ssl=False)
+api = pool.get_api()
+leases = api.get_resource("/ip/dhcp-server/lease")
+for l in leases.get():
+    print("=mac=" + str(l.get("mac-address","")) + \
+          "=addr=" + str(l.get("address","")) + \
+          "=host=" + str(l.get("host-name","")) + \
+          "=client=" + str(l.get("client-id","")) + \
+          "=server=" + str(l.get("server","")))
+pool.disconnect()
+PYEOF;
+
+        $output = $this->execPython($script);
+        $leases = [];
+        foreach (explode("\n", $output) as $line) {
+            if (preg_match('/=mac=(\S+)=addr=(\S+)=host=(.*)=client=(.*)=server=(.*)/', $line, $m)) {
+                $leases[] = [
+                    'mac' => $m[1],
+                    'ip' => $m[2],
+                    'hostname' => $m[3] !== '' ? $m[3] : null,
+                    'client_id' => $m[4] !== '' ? $m[4] : null,
+                    'server' => $m[5] !== '' ? $m[5] : null,
+                ];
+            }
+        }
+        return $leases;
+    }
+
     public function isReachable(Router $router): bool
     {
         $mikrotikIp = $this->getMikroTikIp($router);
@@ -217,7 +279,7 @@ PYEOF;
         return !empty(trim($output));
     }
 
-    protected function getMikroTikIp(Router $router): string
+    public function getMikroTikIp(Router $router): string
     {
         $nasIp = \Illuminate\Support\Facades\DB::table('nas')
             ->where('shortname', $router->nas_identifier)
@@ -241,10 +303,9 @@ PYEOF;
         $result = implode("\n", $output);
 
         if ($exitCode !== 0) {
-            Log::warning('MikroTik API failed', [
-                'exit_code' => $exitCode,
-                'output' => $result,
-            ]);
+            $msg = "MikroTik API failed: exit={$exitCode}, output={$result}";
+            Log::warning($msg);
+            throw new \RuntimeException($msg);
         }
 
         return $result;

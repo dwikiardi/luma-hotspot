@@ -10,6 +10,7 @@ class UserSession extends Model
 {
     protected $fillable = [
         'user_id',
+        'username',
         'device_id',
         'router_id',
         'mac_address',

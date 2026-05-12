@@ -282,3 +282,53 @@ Schedule::call(function () {
         \Illuminate\Support\Facades\Log::warning('MikroTik sync failed', ['error' => $e->getMessage()]);
     }
 })->everyMinute();
+
+// Poll DHCP leases from MikroTik untuk Device DNA fingerprint capture
+Schedule::call(function () {
+    try {
+        $service = app(\App\Services\MikroTikApiService::class);
+        $dnaService = app(\App\Services\DeviceDnaService::class);
+        $routers = \App\Models\Router::where('is_active', true)->get();
+
+        foreach ($routers as $router) {
+            try {
+                $leases = $service->getDhcpLeases($router);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning("DHCP lease poll failed for {$router->nas_identifier}", ['error' => $e->getMessage()]);
+                continue;
+            }
+
+            foreach ($leases as $lease) {
+                $mac = $lease['mac'] ?? '';
+                if (empty($mac) || $mac === '00:00:00:00:00:00') continue;
+
+                $exists = \App\Models\DhcpFingerprint::where('mac_address', strtoupper($mac))
+                    ->where('detected_at', '>', now()->subHours(24))
+                    ->exists();
+
+                if ($exists) continue;
+
+                try {
+                    $dnaService->recordFingerprint(
+                        $mac,
+                        $lease['ip'] ?? null,
+                        $lease['hostname'] ?? null,
+                        null,
+                        null,
+                        $lease['client_id'] ?? null,
+                        $router
+                    );
+
+                    \App\Services\ActivityLogger::log('device_dna', 'lease_poll',
+                        "DHCP lease poll: MAC={$mac} host={$lease['hostname']}",
+                        ['mac' => $mac, 'hostname' => $lease['hostname'], 'router' => $router->nas_identifier]
+                    );
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::warning("DeviceDNA lease poll record failed for {$mac}", ['error' => $e->getMessage()]);
+                }
+            }
+        }
+    } catch (\Throwable $e) {
+        \Illuminate\Support\Facades\Log::warning('DHCP lease poll scheduler failed', ['error' => $e->getMessage()]);
+    }
+})->everyFiveMinutes();

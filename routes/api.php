@@ -20,6 +20,9 @@ Route::post('/dhcp-hook', function (Request $request) {
     $ip = $request->input('ip', '0.0.0.0');
     $hostname = $request->input('host', '');
     $dhcpServer = $request->input('server', '');
+    $vendorClassId = $request->input('vendor_class_id');
+    $parameterRequestList = $request->input('parameter_request_list');
+    $clientId = $request->input('client_id');
 
     // Cari router dari session by MAC, fallback ke default
     $router = null;
@@ -45,6 +48,15 @@ Route::post('/dhcp-hook', function (Request $request) {
         \App\Services\ActivityLogger::log('dhcp_hook', 'lease', "DHCP lease: MAC={$mac} IP={$ip} host={$hostname}", [
             'mac' => $mac, 'ip' => $ip, 'hostname' => $hostname,
         ]);
+
+        // Device DNA: record DHCP fingerprint untuk cross-MAC identification
+        try {
+            app(\App\Services\DeviceDnaService::class)->recordFingerprint(
+                $mac, $ip, $hostname, $vendorClassId, $parameterRequestList, $clientId, $router
+            );
+        } catch (\Throwable $e) {
+            Log::warning('DeviceDNA record failed', ['error' => $e->getMessage()]);
+        }
 
         // Cleanup old entries (> 5 minutes)
         PendingConnection::where('router_id', $router->id)

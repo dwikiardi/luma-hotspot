@@ -18,11 +18,13 @@ Route::get('/connecttest.txt', fn () => response('Microsoft Connect Test', 200))
 
 Route::get('/portal', [PortalController::class, 'show'])->name('portal');
 
-// iOS CNA Login — create session from welcome page before profile download
+// CNA Login — one-tap connect with MikroTik PAP (no .mobileconfig profile)
 Route::post('/cna-login', function (\Illuminate\Http\Request $request) {
     $roomNumber = $request->input('room_number');
     $nasId = $request->input('nas_id');
     $mac = $request->input('client_mac', 'unknown');
+    $linkLogin = $request->input('link_login');
+    $dst = \App\Http\Controllers\PortalController::sanitizeDst($request->input('dst'));
 
     $router = \App\Models\Router::where('nas_identifier', $nasId)->first();
     if (! $router) {
@@ -50,28 +52,42 @@ Route::post('/cna-login', function (\Illuminate\Http\Request $request) {
     $engine = app(\App\Services\GracePeriodEngine::class);
     $session = $engine->createSession($request, $user, $device, $router);
 
-    // Build connect URL with room param for personalized connected page
-    $escapeParams = http_build_query(array_filter([
-        'nas_id' => $nasId,
-        'client_mac' => $mac,
-        'room' => $roomNumber,
-        'session_token' => $session->cookie_token,
-    ]));
+    // Disconnect from MikroTik so PAP login isn't rejected (shared-users=1)
+    $otherActiveDevices = \App\Models\UserSession::where('user_id', $user->id)
+        ->where('router_id', $router->id)
+        ->where('status', 'active')
+        ->where('id', '!=', $session->id)
+        ->count();
+    if ($otherActiveDevices === 0) {
+        try {
+            app(\App\Services\MikroTikApiService::class)->disconnectUser(
+                $user->identity_value,
+                $router
+            );
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('MikroTik pre-disconnect failed', ['error' => $e->getMessage()]);
+        }
+    }
+
+    // Build MikroTik PAP login URL directly — one-tap connect, no profile install
+    $loginUrl = app(PortalController::class)->buildMikroTikLoginUrl(
+        $router, $user->identity_value, $user->identity_value,
+        $linkLogin, $dst
+    );
 
     return response()->json([
         'success' => true,
-        'connect_url' => url('/cna-escape?' . $escapeParams),
+        'connect_url' => $loginUrl,
         'message' => 'Room ' . $roomNumber . ' ready',
-    ]);
+    ])->header('Cache-Control', 'no-cache, no-store, must-revalidate');
 });
 
-// Personalized connected page — shows after profile install + Web Clip tap
+// Personalized connected page — shows after successful PAP login
 Route::get('/connected', function (\Illuminate\Http\Request $request) {
     $room = $request->query('room', '');
     $sessionToken = $request->query('session_token', '');
     $nasId = $request->query('nas_id', '');
-    $dst = $request->query('dst', 'https://www.google.com');
-    if (empty($dst)) $dst = 'https://www.google.com';
+    $dst = \App\Http\Controllers\PortalController::sanitizeDst($request->query('dst'));
 
     $router = $nasId ? \App\Models\Router::where('nas_identifier', $nasId)->first() : null;
     $branding = $router?->tenant?->portalConfig?->branding ?? [];
@@ -112,8 +128,7 @@ Route::get('/cna-escape', function (\Illuminate\Http\Request $request) {
     $nasId = $request->query('nas_id', '');
     $mac = $request->query('client_mac', '');
     $linkLogin = $request->query('link_login', '');
-    $dst = $request->query('dst', '');
-    if (empty($dst)) $dst = 'https://www.google.com';
+    $dst = \App\Http\Controllers\PortalController::sanitizeDst($request->query('dst'));
     $room = $request->query('room', '');
     $sessionToken = $request->query('session_token', '');
 
@@ -195,6 +210,74 @@ Route::post('/auth/room', [AuthController::class, 'room']);
 Route::post('/radius/accounting', [RadiusAccountingController::class, 'handle']);
 
 Route::post('/api/fingerprint/analyze', [FingerprintController::class, 'analyze']);
+// Auto-check fingerprint on page load — detect returning device via JS fingerprint
+Route::post('/api/fingerprint/auto-check', function (\Illuminate\Http\Request $request) {
+    $fingerprint = $request->input('fingerprint') ?? $request->header('X-Fingerprint');
+    $nasId = $request->input('nas_id');
+    $mac = $request->input('client_mac', 'unknown');
+    $linkLogin = $request->input('link_login');
+    $dst = \App\Http\Controllers\PortalController::sanitizeDst($request->input('dst'));
+
+    if (!$fingerprint) {
+        return response()->json(['match' => false, 'reason' => 'no_fingerprint']);
+    }
+
+    $router = \App\Models\Router::where('nas_identifier', $nasId)->first();
+    if (!$router) {
+        return response()->json(['match' => false, 'reason' => 'invalid_venue']);
+    }
+
+    $tenantRouterIds = \App\Models\Router::where('tenant_id', $router->tenant_id)->pluck('id')->toArray();
+
+    $session = \App\Models\UserSession::where('fingerprint_hash', $fingerprint)
+        ->whereIn('router_id', $tenantRouterIds)
+        ->where('status', 'active')
+        ->where('expires_at', '>', now())
+        ->first();
+
+    if ($session) {
+        $user = \App\Models\User::find($session->user_id);
+
+        $disconnected = false;
+        try {
+            app(\App\Services\MikroTikApiService::class)->disconnectUser(
+                $user?->identity_value ?? '',
+                $router
+            );
+            $disconnected = true;
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Auto-check pre-disconnect failed', ['error' => $e->getMessage()]);
+        }
+
+        // CNA gak bisa redirect ke captive.apple.com (iOS block) — paksa ke Google
+        $safeDst = 'https://www.google.com';
+
+        $redirectUrl = app(\App\Http\Controllers\PortalController::class)->buildMikroTikLoginUrl(
+            $router, $user?->identity_value ?? '', $user?->identity_value ?? '',
+            $linkLogin, $safeDst
+        );
+
+        \Illuminate\Support\Facades\Log::info('Auto-check match', [
+            'fingerprint' => substr($fingerprint, 0, 24),
+            'user' => $user?->identity_value ?? '?',
+            'router' => $router->nas_identifier,
+            'session_id' => $session->id,
+            'linkLogin' => $linkLogin,
+            'orig_dst' => $dst,
+            'safe_dst' => $safeDst,
+            'connect_url' => $redirectUrl,
+            'disconnected' => $disconnected,
+        ]);
+
+        return response()->json([
+            'match' => true,
+            'connect_url' => $redirectUrl,
+        ])->header('Cache-Control', 'no-cache, no-store, must-revalidate');
+    }
+
+    return response()->json(['match' => false, 'reason' => 'no_session']);
+});
+
 Route::post('/api/fingerprint', function (\Illuminate\Http\Request $request) {
     $response = Http::post(env('FASTAPI_URL').'/api/fingerprint', $request->all());
 

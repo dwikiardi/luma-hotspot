@@ -126,13 +126,13 @@ class RadiusAccountingController extends Controller
 
         if ($session) {
             $session->update([
+                'username' => $username,
                 'last_seen_at' => now(),
                 'expires_at' => now()->addSeconds($sessionTimeout),
                 'mac_address' => $mac ?: $session->mac_address,
                 'ip_address' => $framedIp ?: ($nasIp ?: $session->ip_address),
             ]);
         } else {
-            // Disconnect session active lama untuk user ini
             UserSession::where('user_id', $user->id)
                 ->where('router_id', $router->id)
                 ->where('status', 'active')
@@ -150,6 +150,7 @@ class RadiusAccountingController extends Controller
                 'user_id' => $user->id,
                 'device_id' => $device->id,
                 'router_id' => $router->id,
+                'username' => $username,
                 'mac_address' => $mac ?: 'unknown',
                 'fingerprint_hash' => 'fp-'.substr(md5($mac ?: $username), 0, 16),
                 'cookie_token' => UserSession::generateCookieToken(),

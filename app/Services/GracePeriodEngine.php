@@ -44,53 +44,60 @@ class GracePeriodEngine
         $hasRealFp = $fingerprint && !str_starts_with($fingerprint, 'fp-Mozilla');
         $hasCookie = !empty($cookie);
 
-        // Find ANY session for any user on this router (active or grace)
-        $session = UserSession::where('router_id', $router->id)
-            ->whereIn('status', ['active', 'disconnected'])
-            ->where('expires_at', '>', now())
-            ->first();
-
-        if (! $session) {
-            \App\Services\ActivityLogger::graceRequireLogin('no sessions');
-            return GraceCheckResult::requireLogin();
-        }
+        $tenantRouterIds = \App\Models\Router::where('tenant_id', $router->tenant_id)->pluck('id')->toArray();
 
         \App\Services\ActivityLogger::graceCheck(
             $mac ?: 'unknown', false,
-            UserSession::where('status', 'disconnected')->where('router_id', $router->id)->count(),
-            UserSession::where('status', 'active')->where('router_id', $router->id)->count()
+            UserSession::where('status', 'disconnected')->whereIn('router_id', $tenantRouterIds)->count(),
+            UserSession::where('status', 'active')->whereIn('router_id', $tenantRouterIds)->count()
         );
 
-        // Primary: cookie match
-        if ($hasCookie && $session->cookie_token === $cookie) {
-            \App\Services\ActivityLogger::graceAutoLogin(
-                User::find($session->user_id)?->identity_value ?? '?',
-                $session->id, $session->mac_address, $session->ip_address ?? '?'
-            );
-            return GraceCheckResult::autoLogin($session);
+        // 1. Cookie match (most reliable — survives MAC randomization)
+        if ($hasCookie) {
+            $session = UserSession::whereIn('router_id', $tenantRouterIds)
+                ->where('cookie_token', $cookie)
+                ->whereIn('status', ['active', 'disconnected'])
+                ->where('expires_at', '>', now())
+                ->first();
+            if ($session) {
+                \App\Services\ActivityLogger::graceAutoLogin(
+                    User::find($session->user_id)?->identity_value ?? '?',
+                    $session->id, $session->mac_address, $session->ip_address ?? '?'
+                );
+                return GraceCheckResult::autoLogin($session);
+            }
         }
 
-        // Primary: real JS fingerprint match
-        if ($hasRealFp && $session->fingerprint_hash === $fingerprint) {
-            \App\Services\ActivityLogger::graceAutoLogin(
-                User::find($session->user_id)?->identity_value ?? '?',
-                $session->id, $session->mac_address, $session->ip_address ?? '?'
-            );
-            return GraceCheckResult::autoLogin($session);
+        // 2. Real JS fingerprint match (survives cookie clear + MAC change)
+        if ($hasRealFp) {
+            $session = UserSession::whereIn('router_id', $tenantRouterIds)
+                ->where('fingerprint_hash', $fingerprint)
+                ->whereIn('status', ['active', 'disconnected'])
+                ->where('expires_at', '>', now())
+                ->first();
+            if ($session) {
+                \App\Services\ActivityLogger::graceAutoLogin(
+                    User::find($session->user_id)?->identity_value ?? '?',
+                    $session->id, $session->mac_address, $session->ip_address ?? '?'
+                );
+                return GraceCheckResult::autoLogin($session);
+            }
         }
 
-        // Secondary: MAC + IP scoring
-        $score = 0;
-        if ($hasValidMac && $session->mac_address === $mac) $score += 3;
-        if ($ip && $session->ip_address === $ip) $score += 2;
-        if ($ip && $session->ip_address === $ip && $session->nas_id === $nasId) $score += 1;
-
-        if ($score >= 3) {
-            \App\Services\ActivityLogger::graceAutoLogin(
-                User::find($session->user_id)?->identity_value ?? '?',
-                $session->id, $session->mac_address, $session->ip_address ?? '?'
-            );
-            return GraceCheckResult::autoLogin($session);
+        // 3. MAC match (works on non-randomizing devices / same network)
+        if ($hasValidMac) {
+            $session = UserSession::whereIn('router_id', $tenantRouterIds)
+                ->where('mac_address', $mac)
+                ->whereIn('status', ['active', 'disconnected'])
+                ->where('expires_at', '>', now())
+                ->first();
+            if ($session) {
+                \App\Services\ActivityLogger::graceAutoLogin(
+                    User::find($session->user_id)?->identity_value ?? '?',
+                    $session->id, $session->mac_address, $session->ip_address ?? '?'
+                );
+                return GraceCheckResult::autoLogin($session);
+            }
         }
 
         \App\Services\ActivityLogger::graceRequireLogin('no matching signals');
@@ -149,31 +156,29 @@ class GracePeriodEngine
             ->first();
 
         if ($existing) {
-            // UPDATE existing session — NEVER change cookie_token (immutable!)
             $existing->update([
                 'status' => 'active',
+                'username' => $user->identity_value,
                 'login_at' => now(),
                 'last_seen_at' => now(),
                 'expires_at' => now()->addSeconds($sessionTimeout),
                 'disconnected_at' => null,
                 'ip_address' => $clientIp ?: $existing->ip_address,
                 'mac_address' => $mac !== 'unknown' ? $mac : $existing->mac_address,
-                // Only overwrite fingerprint with real JS fp
                 'fingerprint_hash' => ($isRealFp && $fingerprint) ? $fingerprint : $existing->fingerprint_hash,
-                // NEVER change cookie_token
             ]);
             $this->logDeviceFingerprint($request, $user, $device, $router);
             return $existing;
         }
 
-        // CREATE new session (first time for this user+router)
         $session = UserSession::create([
             'user_id' => $user->id,
             'device_id' => $device->id,
             'router_id' => $router->id,
+            'username' => $user->identity_value,
             'mac_address' => $mac,
             'fingerprint_hash' => ($isRealFp && $fingerprint) ? $fingerprint : null,
-            'cookie_token' => UserSession::generateCookieToken(), // Generate ONCE
+            'cookie_token' => UserSession::generateCookieToken(),
             'ip_address' => $clientIp,
             'login_at' => now(),
             'last_seen_at' => now(),

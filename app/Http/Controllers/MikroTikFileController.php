@@ -168,12 +168,17 @@ class MikroTikFileController extends Controller
 </head>
 <body>
     <div class="container">
-        <h2>Redirecting to WiFi Portal</h2>
+        <h2>Redirecting...</h2>
         <div class="loader"></div>
         <p>If you are not redirected, <a href="'.$portalUrl.'">click here</a></p>
     </div>
     <script>
-        window.location.href = "'.$portalUrl.'";
+        var linkOrig = "$(link-orig)";
+        if (linkOrig && linkOrig !== "$(link-orig)" && linkOrig !== "") {
+            window.location.href = linkOrig;
+        } else {
+            window.location.href = "'.$portalUrl.'";
+        }
     </script>
 </body>
 </html>';
@@ -228,7 +233,8 @@ class MikroTikFileController extends Controller
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Connection Status</title>
+    <title>Connected</title>
+    <meta http-equiv="refresh" content="1;url=$(link-orig)">
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -262,6 +268,14 @@ class MikroTikFileController extends Controller
         <div class="info"><span class="label">Session Time:</span> <span class="value">$(uptime)</span></div>
         <div class="info"><span class="label">Bytes In/Out:</span> <span class="value">$(bytes-in) / $(bytes-out)</span></div>
     </div>
+    <script>
+        var linkOrig = "$(link-orig)";
+        if (linkOrig && linkOrig !== "$(link-orig)" && linkOrig !== "") {
+            if (linkOrig.indexOf("captive.apple.com") === -1) {
+                window.location.href = linkOrig;
+            }
+        }
+    </script>
 </body>
 </html>';
     }

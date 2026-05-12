@@ -145,19 +145,21 @@ class VisitorSessionResource extends Resource
                         $router = $record->router;
                         $username = $record->user?->identity_value;
                         if ($router && $username) {
-                            // 1. Hapus dari MikroTik active + cookie by MAC
-                            $svc = app(\App\Services\MikroTikApiService::class);
-                            $svc->disconnectByMac($router, $record->mac_address);
+                            try {
+                                // 1. Hapus dari MikroTik active + cookie by MAC
+                                $svc = app(\App\Services\MikroTikApiService::class);
+                                $svc->disconnectByMac($router, $record->mac_address);
 
-                            // 2. Kalau ini device terakhir, hapus juga by username
-                            $otherActive = UserSession::where('user_id', $record->user_id)
-                                ->where('router_id', $router->id)
-                                ->where('status', 'active')
-                                ->where('id', '!=', $record->id)
-                                ->count();
-                            if ($otherActive === 0) {
-                                $svc->disconnectUser($username, $router);
-                            }
+                                // 2. Kalau ini device terakhir, hapus juga by username
+                                $otherActive = UserSession::where('user_id', $record->user_id)
+                                    ->where('router_id', $router->id)
+                                    ->where('status', 'active')
+                                    ->where('id', '!=', $record->id)
+                                    ->count();
+                                if ($otherActive === 0) {
+                                    $svc->disconnectUser($username, $router);
+                                }
+                            } catch (\Throwable) {}
 
                             // 3. Hapus radcheck → FreeRADIUS rejection → gak bisa reconnect otomatis
                             \Illuminate\Support\Facades\DB::table('radcheck')
